@@ -1,5 +1,4 @@
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.cache_key import HasCacheKey
 from model import User, TempUser
 from password import hash_password
 from datetime import datetime, timezone
@@ -36,8 +35,8 @@ def create_user(db: Session, temp_user: TempUser):
 def get_temp_user(db: Session, email: str):
     return db.query(TempUser).filter(TempUser.email == email).first()
 
-def delete_temp_user(db: Session, email: str):
-    temp_user = get_temp_user(db, email)
-    if temp_user:
-        db.delete(temp_user)
-        db.commit()
+# def delete_temp_user(db: Session, email: str):
+#     temp_user = get_temp_user(db, email)
+#     if temp_user:
+#         db.delete(temp_user)
+#         db.commit()
