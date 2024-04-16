@@ -10,6 +10,7 @@ from database import engine, SessionLocal, get_db
 from model import Base, TempUser, User
 from schema import UserRegistration, TOTPValidation
 from crud import create_temp_user, get_temp_user, create_user 
+from util import JWT_SECRET, ALGORITHM, pwd_context, create_jwt
 
 import pyotp
 import qrcode
@@ -17,40 +18,12 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 import secrets
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 from io import BytesIO
 import os
 import time
 import base64
 import json
-
-
-
-# JWT config
-
-JWT_SECRET = "your_jwt_secret"
-ALGORITHM = "HS256"
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-from datetime import datetime, timedelta
-from jose import jwt
-
-def create_jwt(username: str, secret: str, is_secure: bool):
-    # Define token expiration time
-    expiration = datetime.utcnow() + timedelta(hours=1)  # Token expires in 1 hour
-
-    # Create token payload
-    payload = {
-        "sub": username,  # Subject, usually the username or user id
-        "iat": datetime.utcnow(),  # Issued at time
-        "exp": expiration,  # Expiration time
-    }
-
-    # Encode the payload
-    token = jwt.encode(payload, secret, algorithm=ALGORITHM)
-
-    return token
-
 
 # Basic authentication dependency
 security = HTTPBasic()
@@ -64,7 +37,6 @@ security = HTTPBasic()
 Base.metadata.create_all(bind=engine)
 
 # registration
-
 @app.post('/register/')
 async def register(user_data: UserRegistration, response: Response, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == user_data.email).first()
@@ -82,7 +54,6 @@ async def register(user_data: UserRegistration, response: Response, db: Session 
     temp_user_details['totp_secret'] = totp_secret
     create_temp_user(db, temp_user_details)
 
-    response.set_cookie(key="user_email", value=user_data.email, httponly=True, max_age=3600, secure=True, samesite='Lax')
     return StreamingResponse(buf, media_type="image/png")
 
 # totp validation
@@ -92,7 +63,6 @@ async def validate_totp(totp_details: TOTPValidation, db: Session = Depends(get_
 
     temp_user = db.query(TempUser).filter(TempUser.email == totp_details.email).first()
 
-    # temp_user = db.query(TempUser).filter(TempUser.email == totp_details.email).order_by(desc(TempUser.created_at)).first()
     if not temp_user:
         raise HTTPException(status_code=400, detail="Please re-register.")
 
@@ -114,11 +84,7 @@ async def login(response: Response, credentials: HTTPBasicCredentials = Depends(
 
     user = db.query(User).filter(User.email == username).first()
     if user and pwd_context.verify(password, str(user.hashed_password)):
-        # Generate a JWT token
         token = create_jwt(username, JWT_SECRET, True)
-        # token = create_jwt(username, JWT_SECRET, True)
-
-        # Set the JWT token as a secure cookie in the response
         response.set_cookie(key="access_token", value=f"Bearer {token}", httponly=True, secure=False)
 
         return {"message": "Login successful"}
@@ -139,7 +105,6 @@ async def validate(request: Request, db: Session = Depends(get_db)):
         )
 
     try:
-        # Here you strip the "Bearer " prefix to get the actual token
         token = token.split(" ")[1] if ' ' in token else token
         decoded = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
     except JWTError as e:
@@ -148,7 +113,6 @@ async def validate(request: Request, db: Session = Depends(get_db)):
             detail=str(e)
         )
 
-    # Retrieve the user from the database
     user = db.query(User).filter(User.email == decoded['sub']).first()
     if not user:
         raise HTTPException(
@@ -156,7 +120,6 @@ async def validate(request: Request, db: Session = Depends(get_db)):
             detail="User not found"
         )
 
-    # Update the last login time
     user.last_login = datetime.utcnow()
     db.commit()
 
@@ -197,11 +160,12 @@ async def logout(request: Request, response: Response):
             detail="No active session found"
         )
 
-    # Ensure you specify the same attributes as when the cookie was set
     response.delete_cookie(key="access_token", path="/", httponly=True, secure=False)
-    return Response(status_code=status.HTTP_204_NO_CONTENT, content="Logged out successfully")
-    # return {'message': 'successfully logged out'}
+    # return Response(status_code=status.HTTP_204_NO_CONTENT, content="Logged out successfully")
+    return {'message': 'Successfully logged out'}
 
+
+# This is just a test to check for the cookie to work or not
 # @app.post('/cookie/')
 # async def cookie(response: Response):
 #     # For the purpose of testing, we're setting a simple static cookie
