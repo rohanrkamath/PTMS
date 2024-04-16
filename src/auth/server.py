@@ -134,8 +134,8 @@ async def validate(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("access_token")
     if not token:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authenticated"
+            status_code = status.HTTP_403_FORBIDDEN,
+            detail = "Not authenticated"
         )
 
     try:
@@ -163,7 +163,29 @@ async def validate(request: Request, db: Session = Depends(get_db)):
     return f"{decoded['sub']} has successfully logged in!"
 
 # curent_logged_in_users
-
+@app.get('/get_current_user')
+async def get_current_user(request: Request, db: Session = Depends(get_db)):
+    token = request.cookies.get("access_token")
+    if not token:
+        return {'message': 'No user is logged in.'}
+    
+    try:
+        token = token.split(" ")[1] if ' ' in token else token
+        decoded = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+    except JWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
+    
+    user = db.query(User).filter(User.email == decoded['sub']).first()
+    if not user:
+        raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="User not found"
+    )
+ 
+    return f"User currently logged in: {decoded['sub']}"
 
 # logout
 
