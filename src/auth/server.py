@@ -128,6 +128,7 @@ async def login(response: Response, credentials: HTTPBasicCredentials = Depends(
             detail="Invalid credentials"
         )
 
+# JWT cookie validation route
 @app.post("/validate")
 async def validate(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("access_token")
@@ -161,12 +162,23 @@ async def validate(request: Request, db: Session = Depends(get_db)):
 
     return f"{decoded['sub']} has successfully logged in!"
 
+# curent_logged_in_users
 
-
-
-# curent_loggedin_users
 
 # logout
+
+@app.post('/logout')
+async def logout(request: Request, response: Response):
+    if "access_token" not in request.cookies:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No active session found"
+        )
+
+    # Ensure you specify the same attributes as when the cookie was set
+    response.delete_cookie(key="access_token", path="/", httponly=True, secure=False)
+    return Response(status_code=status.HTTP_204_NO_CONTENT, content="Logged out successfully")
+    # return {'message': 'successfully logged out'}
 
 # @app.post('/cookie/')
 # async def cookie(response: Response):
