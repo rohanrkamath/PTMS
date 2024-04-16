@@ -2,6 +2,8 @@ from fastapi import FastAPI, Depends, HTTPException, Response, Cookie, status, R
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordBearer, HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
 
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -29,6 +31,39 @@ import json
 security = HTTPBasic()
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+ 
+ 
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"message": exc.detail},
+    )
+ 
+ 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError):
+    result = list(
+        map(
+            lambda error: {"message": error["msg"], "field": error["loc"][1]},
+            exc.args[0],
+        )
+    )
+    return JSONResponse(status_code=422, content=result)
+ 
+ 
+@app.exception_handler(Exception)
+async def validation_exception_handler(request, exc):
+    print(exc)
+    return JSONResponse(status_code=500, content={"message": "Internal Server Error"})
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -93,7 +128,13 @@ async def login(response: Response, credentials: HTTPBasicCredentials = Depends(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials"
         )
+    
+@app.post('/xyz')
+async def validate(request: Request, db: Session = Depends(get_db)):
+    print(request.cookies.get('access_token'))
+    print('hello')
 
+# not required; add middleware to routes that need access token
 # JWT cookie validation route
 @app.post("/validate")
 async def validate(request: Request, db: Session = Depends(get_db)):
