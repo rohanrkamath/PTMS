@@ -1,0 +1,152 @@
+MongoDB to store project details – 
+
+TaskManagement Collection – 
+
+Projects collection: 
+
+[
+  {
+    "_id": "",
+    "name": "",
+    "description": "",
+    "start_date": "",
+    "end_date": "",
+    "status": "",
+    "members": ["user1", "user2", "user3"],   // from user collection
+    "epics": ["epic1", "epic2"]  // from epic collection
+  },
+  // ... other projects
+]
+
+Epics collection:
+
+[
+  {
+    "_id": "",
+    "name": "",
+    "description": "",
+    "project_id": "",  // from projected collection
+    "stories": ["story1", "story2"], // from stories collection
+    "status": "In Progress",  // Enum; In progess/done
+    "start_date": "2024-01-01",  /
+    "end_date": "2024-03-01"
+  },
+  // ... other epics
+]
+
+Stories collection: 
+
+[
+  {
+    "_id": "",
+    "name": "",
+    "description": "",
+    "epic_id": "epic1",
+    "subtasks": ["subtask1", "subtask2"],
+    "status": "Done",  
+    "priority": "High",  
+    "assignees": ["user1", "user2"],
+    "sprint_id": "sprint1"
+  },
+  // ... other stories
+]
+
+Tasks collection:
+
+[
+  {
+    "_id": "",
+    "name": "",
+    "description": "",
+    "epic_id": "epic1",
+    "subtasks": ["subtask1"],
+    "status": "Done",
+    "priority": "High",
+    "assignee": "user2",
+    "sprint_id": "sprint1"
+  },
+  // ... other tasks
+]
+
+Bugs collection:
+
+[
+  {
+    "_id": "",
+    "name": "",
+    "description": "",
+    "epic_id": "epic1",
+    "subtasks": ["subtask1"],
+    "status": "In-progress",
+    "priority": "Medium",
+    "assignee": "user3",
+    "sprint_id": "sprint1"
+  },
+  // ... other tasks
+]
+
+SubTasks collection:
+
+[
+  {
+    "_id": "",
+    "name": "",
+    "description": "”,
+    "parent_id": "",   // can be from story, task or bug
+    “time_to_be_spent”: 4,
+    "status": "Done",
+    "priority": "Low",
+    "assignee": "user3"
+  },
+  // ... other subtasks
+]
+
+Sprints collection:
+
+[
+  {
+    "_id": "",
+    "name": "Sprint 1",
+    "goal": "Complete the homepage wireframe.",
+    "start_date": "2024-01-01",
+    "end_date": "2024-01-14",
+    "associated_task": ["task1", "task2"],
+    "associated_story": ["story1", “story2"],
+    "associated_bug": ["bug1"],
+  },
+  // ... other sprints
+]
+
+Timesheets collection:
+
+[
+  {
+    "_id": "",
+    "user_id": "user2",
+    "subtask_id": "subtask1",
+    "hours_worked": 8,   // 
+    "date": "2024-01-02",
+    "is_billable": true,  // Boolean
+    "status": "Submitted"  // ENUM
+  },
+  // ... other timesheets
+]
+
+Users collection:
+
+These details will be taken from the the User SQL database from the Auth service.
+
+[
+  {
+    "_id": "",
+    "name": "user1",
+    "email": "user1@example.com",
+    "role": "Project Manager",
+    "assigned_projects": ["project1"],
+    "assigned_epic": ["epic1"],
+    "assigned_tasks": ["task1"],
+    "assigned_stories": [“story2”],
+    "assigned_bugs": []
+  },
+  // ... other users
+]
