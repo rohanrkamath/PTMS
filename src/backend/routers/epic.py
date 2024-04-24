@@ -10,10 +10,9 @@ from database import db, get_db
 from uuid import uuid4
 from datetime import datetime
 from typing import List
-import logging
 
 epic = APIRouter(
-    prefix="/project",
+    # prefix="/project",
     tags=["epics"],
     dependencies=[Depends(get_current_user)]
 )
