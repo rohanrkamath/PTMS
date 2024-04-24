@@ -15,8 +15,8 @@ class Priority(str, Enum):
     high = "high"
     critical = "critical"
 
-class User(BaseModel):
-    user_id: str
+# class User(BaseModel):
+#     user_id: str
 
 class ProjectBase(BaseModel):
     name: str

@@ -26,12 +26,12 @@ project = APIRouter(
 
 projects_collection = db.projects
 
-def validate_project_members(members: List[str], db_session):
-    existing_members = db_session.query(User).filter(User.email.in_(members)).all()
-    existing_member_emails = {member.email for member in existing_members}
-    non_existing_members = [member for member in members if member not in existing_member_emails]
-    if non_existing_members:
-        raise HTTPException(status_code=400, detail=f"The following users do not exist: {', '.join(non_existing_members)}")
+# def validate_project_members(members: List[str], db_session):
+#     existing_members = db_session.query(User).filter(User.email.in_(members)).all()
+#     existing_member_emails = {member.email for member in existing_members}
+#     non_existing_members = [member for member in members if member not in existing_member_emails]
+#     if non_existing_members:
+#         raise HTTPException(status_code=400, detail=f"The following users do not exist: {', '.join(non_existing_members)}")
 
 # create a project
 @project.post("/projects/", response_model=ProjectInDB)
@@ -68,20 +68,16 @@ async def read_project(project_id: str = Path(..., description="The ID of the pr
 @project.put("/projects/{project_id}", response_model=ProjectInDB)
 async def update_project(project: ProjectUpdate, project_id: str = Path(...), db: Session = Depends(get_db)):
 
-    # Validate project members
     validate_project_members(project.members, db)
 
-    # Get the existing project from the database
     existing_project = projects_collection.find_one({"_id": project_id})
     if not existing_project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Update the project data
     update_data = project.dict(exclude_unset=True)
     update_data["updated_at"] = datetime.now()
     
     try:
-        # Perform the update operation
         result = projects_collection.update_one({"_id": project_id}, {"$set": update_data})
         if result.modified_count == 1:
             updated_project = {**existing_project, **update_data}
@@ -96,13 +92,11 @@ async def update_project(project: ProjectUpdate, project_id: str = Path(...), db
 @project.delete("/projects/{project_id}", response_model=ProjectInDB)
 async def delete_project(project_id: str = Path(...), db: Session = Depends(get_db)):
 
-    # Check if the project exists
     existing_project = projects_collection.find_one({"_id": project_id})
     if not existing_project:
         raise HTTPException(status_code=404, detail="Project not found")
 
     try:
-        # Delete the project from the database
         result = projects_collection.delete_one({"_id": project_id})
         if result.deleted_count == 1:
             existing_project["id"] = existing_project.pop("_id")
