@@ -150,3 +150,16 @@ These details will be taken from the the User SQL database from the Auth service
   },
   // ... other users
 ]
+
+Project1 -> Epic1 -> Task1 -> Subtask1
+
+# April 23rd
+middleware vs utility function -> to validate JWT
+sort schema out
+
+Schema structure - 
+
+# project
+# epics -> project_id
+# task -> projectid, epic_id
+# subtask -> epic_id task_id

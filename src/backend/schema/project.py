@@ -1,183 +1,108 @@
+from pydantic import BaseModel, Field, EmailStr, validator
+from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field
-from datetime import date
-import bson
+from enum import Enum
+from uuid import uuid4
 
+class Status(str, Enum):
+    to_do = "to_do"
+    doing = "doing"
+    done = "done"
 
-# Helper function to handle ObjectId serialization
-def to_camel(string: str) -> str:
-    return ''.join(word.capitalize() if i else word for i, word in enumerate(string.split('_')))
+class Priority(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+    critical = "critical"
 
-
-class PyObjectId(bson.ObjectId):
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, v):
-        if not bson.ObjectId.is_valid(v):
-            raise ValueError('Invalid objectid')
-        return str(bson.ObjectId(v))
-
-    @classmethod
-    def __modify_schema__(cls, field_schema):
-        field_schema.update(type='string')
-
-
-# Project request schema
+class User(BaseModel):
+    user_id: str
 
 class ProjectBase(BaseModel):
     name: str
     description: Optional[str] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    status: Optional[str] = None
-    members: Optional[List[PyObjectId]] = []
-    epics: Optional[List[PyObjectId]] = []
-
-    class Config:
-        allow_population_by_field_name = True
-        json_encoders = {bson.ObjectId: str}
-        alias_generator = to_camel
-        arbitrary_types_allowed = True
-        schema_extra = {
-            "example": {
-                "name": "New Project",
-                "description": "This is a new project.",
-                "start_date": "2024-01-01",
-                "end_date": "2024-12-31",
-                "status": "In Progress",
-                "members": ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"],
-                "epics": ["507f191e810c19729de860ea", "507f191e810c19729de860eb"]
-            }
-        }
-
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    members: Optional[List[str]] = None
 
 class ProjectCreate(ProjectBase):
     pass
 
-
 class ProjectUpdate(ProjectBase):
     pass
 
-# Epic request schema
+class ProjectInDB(ProjectBase):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    project_created: datetime = Field(default_factory=datetime.now)
+    updated_at: Optional[datetime] = None
+    created_by: str
 
-class EpicBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-    project_id: PyObjectId
-    status: Optional[str] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    assignees: Optional[List[PyObjectId]] = []
 
-class EpicCreate(EpicBase):
-    pass
 
-class EpicUpdate(EpicBase):
-    pass
+# class Epic(BaseModel):
+#     _id: str = Field(..., alias="id")
+#     name: str
+#     description: Optional[str]
+#     project_id: str
+#     start_date: Optional[datetime]
+#     end_date: Optional[datetime]
 
-# Story request schema
+# class EpicCreate(Epic):
+#     pass
 
-class StoryBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-    epic_id: PyObjectId
-    subtasks: Optional[List[PyObjectId]] = []
-    status: Optional[str] = None
-    priority: Optional[str] = None
-    assignees: Optional[List[PyObjectId]] = []
-    sprint_id: Optional[PyObjectId] = None
+# class EpicUpdate(Epic):
+#     pass
 
-class StoryCreate(StoryBase):
-    pass
+# class Task(BaseModel):
+#     _id: str = Field(..., alias="id")
+#     name: str
+#     description: Optional[str]
+#     task_type: str
+#     project_id: str
+#     epic_id: str
+#     status: Status
+#     priority: Priority 
+#     assignee: User
+#     members: Optional[List[User]]
 
-class StoryUpdate(StoryBase):
-    pass
+# class TaskCreate(Task):
+#     pass
 
-# Task request schema
+# class TaskUpdate(Task):
+#     pass
 
-class TaskBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-    epic_id: PyObjectId
-    subtasks: Optional[List[PyObjectId]] = []
-    status: Optional[str] = None
-    priority: Optional[str] = None
-    assignee: Optional[PyObjectId] = None
-    sprint_id: Optional[PyObjectId] = None
+# class SubTask(BaseModel):
+#     _id: str = Field(..., alias="id")
+#     name: str
+#     description: Optional[str]
+#     project_id: str
+#     epic_id: str
+#     task_id: str
+#     time_to_be_spent: int
+#     status: Status 
+#     priority: Priority 
+#     assignee: User
+#     members: Optional[List[User]]
 
-class TaskCreate(TaskBase):
-    pass
+# class SubTaskCreate(SubTask):
+#     pass
 
-class TaskUpdate(TaskBase):
-    pass
+# class SubTaskUpdate(SubTask):
+#     pass
 
-# Bug request schema
+# class Sprint(BaseModel):
+#     _id: str = Field(..., alias="id")
+#     name: str
+#     goal: str
+#     start_date: datetime
+#     end_date: datetime
+#     associated_tasks: List[Task]
 
-class BugBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-    epic_id: PyObjectId
-    subtasks: Optional[List[PyObjectId]] = []
-    status: Optional[str] = None
-    priority: Optional[str] = None
-    assignee: Optional[PyObjectId] = None
-    sprint_id: Optional[PyObjectId] = None
-
-class BugCreate(BugBase):
-    pass
-
-class BugUpdate(BugBase):
-    pass
-
-# Subtask request schema
-
-class SubtaskBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-    parent_id: PyObjectId
-    time_to_be_spent: Optional[int] = None
-    status: Optional[str] = None
-    priority: Optional[str] = None
-    assignee: Optional[PyObjectId] = None
-
-class SubtaskCreate(SubtaskBase):
-    pass
-
-class SubtaskUpdate(SubtaskBase):
-    pass
-
-# Sprint request schema
-
-class SprintBase(BaseModel):
-    name: str
-    goal: Optional[str] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    associated_tasks: Optional[List[PyObjectId]] = []
-    associated_stories: Optional[List[PyObjectId]] = []
-    associated_bugs: Optional[List[PyObjectId]] = []
-
-class SprintCreate(SprintBase):
-    pass
-
-class SprintUpdate(SprintBase):
-    pass
-
-# Timesheet request schema
-
-class TimesheetBase(BaseModel):
-    user_id: PyObjectId
-    subtask_id: PyObjectId
-    hours_worked: int
-    date: date
-    is_billable: bool
-    status: Optional[str] = None
-
-class TimesheetCreate(TimesheetBase):
-    pass
-
-class TimesheetUpdate(TimesheetBase):
-    pass
+# class Timesheet(BaseModel):
+#     _id: str = Field(..., alias="id")
+#     user_id: User
+#     # subtask_id: Subtask
+#     hours_worked: int
+#     date: datetime
+#     is_billable: bool
+#     status: Status

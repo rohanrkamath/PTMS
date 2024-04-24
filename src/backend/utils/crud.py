@@ -38,29 +38,4 @@ def create_user(db: Session, temp_user: TempUser):
 def get_temp_user(db: Session, email: str):
     return db.query(TempUser).filter(TempUser.email == email).first()
 
-# crud operations for projects
 
-def create_project(project_data):
-    result = db.projects.insert_one(project_data)
-    return str(result.inserted_id)
-
-def read_project(project_id):
-    project = db.projects.find_one({'_id': ObjectId(project_id)})
-    if project:
-        project['id'] = str(project['_id'])
-        del project['_id']
-    return project
-
-def update_project(project_id, project_data):
-    db.projects.update_one({'_id': ObjectId(project_id)}, {'$set': project_data})
-    return read_project(project_id)
-
-def delete_project(project_id):
-    result = db.projects.delete_one({'_id': ObjectId(project_id)})
-    return result.deleted_count
-
-# def delete_temp_user(db: Session, email: str):
-#     temp_user = get_temp_user(db, email)
-#     if temp_user:
-#         db.delete(temp_user)
-#         db.commit()
