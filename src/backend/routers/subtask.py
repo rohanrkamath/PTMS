@@ -60,7 +60,7 @@ async def read_subtask(subtask_id: str = Path(...)):
 
 # update a subtask
 @subtask.put("/subtask/{subtask_id}", response_model=SubTaskInDB)
-async def update_subtask(task: SubTaskUpdate, subtask_id: str = Path(...), db: Session = Depends(get_db)):
+async def update_subtask(subtask: SubTaskUpdate, subtask_id: str = Path(...), db: Session = Depends(get_db)):
 
     check_id_exists(subtask.project_id, projects_collection)
     check_id_exists(subtask.epic_id, epics_collection)
