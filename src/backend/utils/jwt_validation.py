@@ -15,8 +15,6 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
         )
 
     try:
-        # Here, we split the token only if it starts with "Bearer" (common in Authorization headers)
-        # Since it's coming from cookies directly, you might not need this step unless you set it with "Bearer"
         token = token.split(" ")[1] if token.startswith('Bearer ') else token
         decoded = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
     except JWTError as e:

@@ -12,7 +12,7 @@ def create_jwt(username: str, secret: str, is_secure: bool):
     expiration = datetime.utcnow() + timedelta(hours=1)  # Token expires in 1 hour
 
     payload = {
-        "sub": username,  # Subject, usually the username or user id
+        "sub": username,  # user email 
         "iat": datetime.utcnow(),  # Issued at time
         "exp": expiration,  # Expiration time
     }
