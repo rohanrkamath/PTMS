@@ -4,11 +4,6 @@ from typing import List, Optional
 from enum import Enum
 from uuid import uuid4
 
-class TaskType(str, Enum):
-    task = "Task"
-    story = "Story"
-    bug = "Bug"
-
 class Status(str, Enum):
     to_do = "to_do"
     doing = "doing"
@@ -20,26 +15,26 @@ class Priority(str, Enum):
     high = "high"
     critical = "critical"
 
-class TaskBase(BaseModel):
+class SubTaskBase(BaseModel):
     name: str
     description: Optional[str] = None
-    task_type: TaskType
     project_id: str
     epic_id: str
+    task_id: str
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     status: Status
     priority: Priority
     members: Optional[List[str]] = None
 
-class TaskCreate(TaskBase):
+class SubTaskCreate(SubTaskBase):
     pass
 
-class TaskUpdate(TaskBase):
+class SubTaskUpdate(SubTaskBase):
     pass
 
-class TaskInDB(TaskBase):
+class SubTaskInDB(SubTaskBase):
     id: str = Field(default_factory=lambda: str(uuid4()))
-    task_created: datetime = Field(default_factory=datetime.now)
+    subtask_created: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = None
     created_by: str

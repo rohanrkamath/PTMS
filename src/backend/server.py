@@ -9,6 +9,7 @@ from routers.auth import router as auth_router
 from routers.project import project as project_router
 from routers.epic import epic as epic_router
 from routers.task import task as task_router
+from routers.subtask import subtask as subtask_route
 
 app = FastAPI()
 
@@ -50,6 +51,7 @@ app.include_router(auth_router)
 app.include_router(project_router)
 app.include_router(epic_router)
 app.include_router(task_router)
+app.include_router(subtask_route)
 
 if __name__ == "__main__":
     import uvicorn

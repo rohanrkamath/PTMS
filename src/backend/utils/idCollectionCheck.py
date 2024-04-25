@@ -12,4 +12,10 @@ def check_epic_belongs_to_project(epic_id: str, project_id: str, db: Collection)
     
     epic = db.find_one({"_id": epic_id, "project_id": project_id})
     if not epic:
-        raise HTTPException(status_code=404, detail="Epic does not belong to the given project.")
+        raise HTTPException(status_code=404, detail="Epic does not belong to the given project")
+    
+def check_task_belongs_to_epic(task_id: str, epic_id: str, db: Collection):
+    
+    task = db.find_one({"_id": task_id, "epic_id": epic_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task does not belong to the given epic")
