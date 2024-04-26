@@ -26,6 +26,7 @@ class TaskBase(BaseModel):
     task_type: TaskType
     project_id: str
     epic_id: str
+    sprint_id: Optional[str] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     status: Status

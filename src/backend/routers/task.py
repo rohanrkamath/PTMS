@@ -60,6 +60,7 @@ async def update_task(task: TaskUpdate, task_id: str = Path(...), db: Session = 
 
     check_id_exists(task.project_id, projects_collection) 
     check_id_exists(task.epic_id, epics_collection)
+    check_epic_belongs_to_project(task.epic_id, task.project_id, epics_collection)
     validate_project_members(task.members, db)
 
     existing_task = tasks_collection.find_one({"_id": task_id})
