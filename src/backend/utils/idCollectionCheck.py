@@ -2,6 +2,17 @@ from fastapi import HTTPException
 from pymongo.collection import Collection
 from database import db
 
+# class Epic:
+#     collection = db.epics
+#     @staticmethod 
+#     def check_id_exists(project_id: str):
+#         project = find_one({"_id": project_id})
+#         if project is None:
+#             raise HTTPException(status_code=404, detail="ID does not exist for either your project, epic or task")
+        
+# # abstract class
+
+
 def check_id_exists(project_id: str, db: Collection):
 
     project = db.find_one({"_id": project_id})

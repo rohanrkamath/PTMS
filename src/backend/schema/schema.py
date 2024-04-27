@@ -15,9 +15,12 @@ class TOTPValidation(BaseModel):
 #     email: EmailStr
 #     token: str
 
-class UserPublic(BaseModel):
-    user_id: str
-    employee_id: str
-    email: EmailStr
-    first_name: str
-    last_name: str
+# class UserPublic(BaseModel):
+#     user_id: str
+#     employee_id: str
+#     email: EmailStr
+#     first_name: str
+#     last_name: str
+
+# class UserRegistrationinDB(UserRegistration):
+
