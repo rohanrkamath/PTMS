@@ -1,24 +1,11 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from pymongo import MongoClient, ASCENDING
 
-from pymongo import MongoClient
-
-DATABASE_URL = "sqlite:///./users.db"
-
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread":False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-Base = declarative_base()
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 MONGO_URI = 'mongodb://rohanrkamath:1234@localhost:27017/'
 client = MongoClient(MONGO_URI)
 db = client['task_management']
+archive = client['archive']
+
+db.users.create_index([("email", ASCENDING)], unique=True)
+db.temp_users.create_index("created_at", expireAfterSeconds=300)
 

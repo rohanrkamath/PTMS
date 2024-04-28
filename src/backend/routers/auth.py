@@ -1,19 +1,24 @@
-from fastapi import FastAPI, Depends, HTTPException, Response, Cookie, status, Request, APIRouter
+from fastapi import FastAPI, Depends, HTTPException, Response, Cookie, status, Request, APIRouter, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordBearer, HTTPBasic, HTTPBasicCredentials
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.exceptions import RequestValidationError
 
-from sqlalchemy import desc
-from sqlalchemy.orm import Session
 
-from database import engine, SessionLocal, get_db
-from model.model import Base, TempUser, User
-from schema.schema import UserRegistration, TOTPValidation
-from utils.crud import create_temp_user, get_temp_user, create_user 
-from utils.util import JWT_SECRET, ALGORITHM, pwd_context, create_jwt
+# from sqlalchemy import desc
+# from sqlalchemy.orm import Session
 
+from database import db
+# from model.model import Base, TempUser, User
+from schema.user import UserBase, UserInDB, TOTPValidation
+from utils.auth_crud import check_user_exists, create_temp_user, get_temp_user_by_email, create_user, delete_temp_user
+from utils.create_jwt import create_jwt, JWT_SECRET, ALGORITHM
+from utils.password import hash_password, verify_password
+from utils.jwt_validation import decode_jwt
+# from utils.util import JWT_SECRET, ALGORITHM, pwd_context, create_jwt
+
+from bson import ObjectId
+from bson.errors import InvalidId
+from pymongo import DESCENDING
+from pymongo.errors import DuplicateKeyError
 import pyotp
 import qrcode
 from jose import jwt, JWTError
@@ -22,64 +27,29 @@ import secrets
 
 from datetime import datetime, timedelta
 from io import BytesIO
-import os
-import time
-import base64
-import json
 
 # Basic authentication dependency
 security = HTTPBasic()
 
-router = APIRouter()
-
-# # Middleware for error handling
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["*"],
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
- 
- 
-# @app.exception_handler(HTTPException)
-# async def http_exception_handler(request, exc):
-#     return JSONResponse(
-#         status_code=exc.status_code,
-#         content={"message": exc.detail},
-#     )
- 
- 
-# @app.exception_handler(RequestValidationError)
-# async def validation_exception_handler(request, exc: RequestValidationError):
-#     result = list(
-#         map(
-#             lambda error: {"message": error["msg"], "field": error["loc"][1]},
-#             exc.args[0],
-#         )
-#     )
-#     return JSONResponse(status_code=422, content=result)
- 
- 
-# @app.exception_handler(Exception)
-# async def validation_exception_handler(request, exc):
-#     print(exc)
-#     return JSONResponse(status_code=500, content={"message": "Internal Server Error"})
-
-
+auth = APIRouter(
+    tags = ["auth"]
+)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 security = HTTPBasic()
 
-Base.metadata.create_all(bind=engine)
+temp_users_collection = db.temp_users
+users_collection = db.users
 
 # registration
-@router.post('/register/')
-async def register(user_data: UserRegistration, response: Response, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == user_data.email).first()
-    if user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+@auth.post('/register')
+async def register(user_data: UserBase):
+    if check_user_exists(users_collection, user_data.email) or check_user_exists(temp_users_collection, user_data.email):
+        raise HTTPException(status_code=400, detail="Email already registered or pending registration.")
+    
+    hashed_password = hash_password(user_data.password)
+    user_data.password = hashed_password 
 
     totp_secret = pyotp.random_base32()
     uri = pyotp.TOTP(totp_secret).provisioning_uri(name=user_data.email, issuer_name="YourAppName")
@@ -90,118 +60,114 @@ async def register(user_data: UserRegistration, response: Response, db: Session 
 
     temp_user_details = user_data.dict()
     temp_user_details['totp_secret'] = totp_secret
-    create_temp_user(db, temp_user_details)
+    create_temp_user(temp_users_collection, temp_user_details)
 
     return StreamingResponse(buf, media_type="image/png")
 
-# totp validation
+# topt validation
 
-@router.post('/validate-totp/')
-async def validate_totp(totp_details: TOTPValidation, db: Session = Depends(get_db)):
-
-    temp_user = db.query(TempUser).filter(TempUser.email == totp_details.email).first()
-
+@auth.post('/validate-totp/')
+async def validate_totp(totp_details: TOTPValidation):
+    temp_user = get_temp_user_by_email(temp_users_collection, totp_details.email)
     if not temp_user:
-        raise HTTPException(status_code=400, detail="Please re-register.")
+        raise HTTPException(status_code=400, detail="Please re-register, your 5 minutes to register has expired.")
 
-    totp_secret = temp_user.totp_secret
+    totp_secret = temp_user['totp_secret']
     totp = pyotp.TOTP(totp_secret)
-
-    if not totp.verify(totp_details.totp):
+    if totp.verify(totp_details.totp):
+        try:
+            user_data = UserInDB(**temp_user, creation_time=datetime.now(), updated_at=None, last_login=None)
+            create_user(users_collection, user_data.dict(exclude_unset=True))
+            delete_temp_user(temp_users_collection, totp_details.email)
+            return {"message": "Registration successful.", "user_email": user_data.email}
+        except DuplicateKeyError:
+            raise HTTPException(status_code=409, detail="Email already exists in the system.")
+    else:
         raise HTTPException(status_code=403, detail="Wrong TOTP entered.")
 
-    new_user = create_user(db, temp_user)
-    return {"message": "Registration successful.", "user_id": new_user.employee_id}
-
 # login
-
-@router.post('/login')
-async def login(response: Response, credentials: HTTPBasicCredentials = Depends(security), db: Session = Depends(get_db)):
+@auth.post('/login')
+async def login(response: Response, credentials: HTTPBasicCredentials = Depends(security)):
     username = credentials.username
     password = credentials.password
 
-    user = db.query(User).filter(User.email == username).first()
-    if user and pwd_context.verify(password, str(user.hashed_password)):
-        token = create_jwt(username, JWT_SECRET, True)
+    user = users_collection.find_one({"email": username})
+    if user and verify_password(password, user['password']):
+        # Create JWT token with the user's role
+        token = create_jwt(str(user['_id']), JWT_SECRET, user.get('role', 'user'), True)
         response.set_cookie(key="access_token", value=f"Bearer {token}", httponly=True, secure=False)
 
-        return {"message": "Login successful"}
+        users_collection.update_one(
+            {"_id": user['_id']},
+            {"$set": {"last_login": datetime.utcnow()}}
+        )
+        
+        return {"message": "Login successful", "user_email": user['email']}
     else:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=401,
             detail="Invalid credentials"
         )
     
-# not required; add middleware to routes that need access token
-# JWT cookie validation route
-@router.post("/validate")
-async def validate(request: Request, db: Session = Depends(get_db)):
+# get current logged in user
+@auth.get('/get_current_user')
+async def get_current_user(request: Request):
     token = request.cookies.get("access_token")
     if not token:
-        raise HTTPException(
-            status_code = status.HTTP_403_FORBIDDEN,
-            detail = "Not authenticated"
-        )
+        return {'message': 'No user is logged in.'}
+
+    token = token.split(" ")[1] if 'Bearer ' in token else token
 
     try:
-        token = token.split(" ")[1] if ' ' in token else token
-        decoded = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
-    except JWTError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e)
-        )
+        decoded = decode_jwt(token)
+    except HTTPException as e:
+        return {"message": str(e.detail)}
 
-    user = db.query(User).filter(User.email == decoded['sub']).first()
+    try:
+        user_id = ObjectId(decoded['sub'])  # Convert the sub to ObjectId
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
+
+    user = users_collection.find_one({"_id": user_id})
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
-
-    user.last_login = datetime.utcnow()
-    db.commit()
-
-    return f"{decoded['sub']} has successfully logged in!"
-
-# curent_logged_in_users
-@router.get('/get_current_user')
-async def get_current_user(request: Request, db: Session = Depends(get_db)):
-    token = request.cookies.get("access_token")
-    if not token:
-        return {'message': 'No user is logged in.'}
     
-    try:
-        token = token.split(" ")[1] if ' ' in token else token
-        decoded = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
-    except JWTError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e)
-        )
-    
-    user = db.query(User).filter(User.email == decoded['sub']).first()
-    if not user:
-        raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="User not found"
-    )
- 
-    return f"User currently logged in: {decoded['sub']}"
+    return {"message": f"User currently logged in: {user['email']}"}
 
 # logout
 
-@router.post('/logout')
+@auth.post('/logout')
 async def logout(request: Request, response: Response):
-    if "access_token" not in request.cookies:
+    token = request.cookies.get("access_token")
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="No active session found"
         )
 
-    response.delete_cookie(key="access_token", path="/", httponly=True, secure=False)
-    # return Response(status_code=status.HTTP_204_NO_CONTENT, content="Logged out successfully")
-    return {'message': 'Successfully logged out'}
+    token = token.split(" ")[1] if 'Bearer ' in token else token
 
+    try:
+        decoded = decode_jwt(token)
+        user_id = ObjectId(decoded['sub'])
+    except (HTTPException, InvalidId):
+        response.delete_cookie(key="access_token", path="/", httponly=True, secure=True)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid token - Logging out anyway"
+        )
+
+    # Fetch the user from the database to retrieve the email
+    user = users_collection.find_one({"_id": user_id})
+    if not user:
+        response.delete_cookie(key="access_token", path="/", httponly=True, secure=True)
+        raise HTTPException(status_code=404, detail="User not found - Logging out anyway")
+
+    user_email = user['email']
+    response.delete_cookie(key="access_token", path="/", httponly=True, secure=True)
+    return {'message': f'Successfully logged out: {user_email}'}
 
 

@@ -38,3 +38,4 @@ class SubTaskInDB(SubTaskBase):
     subtask_created: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = None
     created_by: str
+

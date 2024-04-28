@@ -1,21 +1,25 @@
-from fastapi import HTTPException, status, Depends, Request
+from fastapi import HTTPException, status, Depends, Request, Security
 from sqlalchemy.orm import Session
 from jose import jwt, JWTError
 from datetime import datetime
-from model.model import User  # Ensure you import your User model correctly
-from utils.util import ALGORITHM, JWT_SECRET
-from database import get_db 
+from utils.create_jwt import ALGORITHM, JWT_SECRET
+from database import db
+from bson import ObjectId
+from bson.errors import InvalidId
 
-def get_current_user(request: Request, db: Session = Depends(get_db)):
+from jose import jwt
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+users_collection = db.users
+
+# user injection
+def get_current_user(request: Request):
     token = request.cookies.get("access_token")
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authenticated"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authenticated")
 
     try:
-        token = token.split(" ")[1] if token.startswith('Bearer ') else token
+        token = token.split(" ")[1] if ' ' in token else token
         decoded = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
     except JWTError as e:
         raise HTTPException(
@@ -23,13 +27,106 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
             detail=str(e)
         )
 
-    user = db.query(User).filter(User.email == decoded['sub']).first()
+    user_id = decoded['sub']  # Ensure this is a valid MongoDB ObjectId as a string
+    try:
+        ObjectId(user_id)  # This is to check if user_id is a valid ObjectId
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
+    
+    user = users_collection.find_one({"_id": ObjectId(user_id)})
+    print(user['email'])
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
 
-    return user.email
+    return user
+
+# admin injection
+def get_current_admin(request: Request):
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authenticated")
+
+    try:
+        token = token.split(" ")[1] if ' ' in token else token
+        decoded = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+    except JWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
+
+    user_id = decoded['sub']
+    try:
+        ObjectId(user_id)  # Validate user_id is a valid ObjectId
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
+    
+    user = users_collection.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    if user.get('role') != 'admin':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions"
+        )
+
+    return user
+
+# imoprting to other files
+def decode_jwt(token: str):
+    try:
+        decoded = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+        return decoded
+    except JWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
+    
+# def get_current_user(request: Request, token: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+#     try:
+#         decoded = jwt.decode(token.credentials, JWT_SECRET, algorithms=[ALGORITHM])
+#         user_id = decoded['sub']
+#     except JWTError as e:
+#         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid credentials")
+
+#     user = users_collection.find_one({"_id": ObjectId(user_id)})
+#     if not user:
+#         raise HTTPException(status_code=404, detail="User not found")
+    
+#     return user
+
+# def get_current_user(request: Request):
+#     token = request.cookies.get("access_token")
+#     if not token:
+#         raise HTTPException(
+#             status_code=status.HTTP_403_FORBIDDEN,
+#             detail="Not authenticated"
+#         )
+
+#     try:
+#         token = token.split(" ")[1] if token.startswith('Bearer ') else token
+#         decoded = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+#     except JWTError as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_403_FORBIDDEN,
+#             detail=str(e)
+#         )
+    
+#     user = users_collection.find_one({"email": decoded['sub']})
+#     if not user:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail="User not found"
+#         )
+
+#     return user['email']
 
 

@@ -7,16 +7,15 @@ JWT_SECRET = "your_jwt_secret"
 ALGORITHM = "HS256"
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def create_jwt(username: str, secret: str, is_secure: bool):
-
-    expiration = datetime.utcnow() + timedelta(hours=1)  # Token expires in 1 hour
+def create_jwt(user_id: str, secret: str, role: str, is_secure: bool):
+    expiration = datetime.utcnow() + timedelta(hours=24)  # Token expires in 24 hours
 
     payload = {
-        "sub": username,  # user email 
+        "sub": user_id,  # user email
         "iat": datetime.utcnow(),  # Issued at time
         "exp": expiration,  # Expiration time
+        "role": role,  # User role
     }
 
     token = jwt.encode(payload, secret, algorithm=ALGORITHM)
-
     return token
