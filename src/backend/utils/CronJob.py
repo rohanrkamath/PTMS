@@ -1,16 +1,15 @@
 # this file will be used to set up a cron job to clear temp table periodically
 
-from sqlalchemy.orm import Session
-from model.model import TempUser
+from database import db
+from pymongo.errors import PyMongoError
 
-def delete_temp_users():
-    session = Session()
-    try:
-        session.query(TempUser).delete()
-        session.commit()
-        print("All temp users deleted successfully.")
-    except Exception as e:
-        session.rollback()
-        print(f"Failed to delete temp users: {str(e)}")
-    finally:
-        session.close()
+temp_users_collection = db.temp_users
+
+try:
+    result = temp_users_collection.delete_many({}) 
+    print(f"All temp users deleted successfully. Count: {result.deleted_count}")
+except PyMongoError as e:
+    print(f"Failed to delete temp users: {str(e)}")
+
+
+
