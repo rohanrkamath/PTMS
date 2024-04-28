@@ -7,8 +7,12 @@ from fastapi.exceptions import RequestValidationError
 from routers.auth import auth as auth_router
 from routers.user import user as user_router
 from routers.admin import admin as admin_router
-# from routers.project import project as project_router
-# from routers.epic import epic as epic_router
+
+from routers.project import project_prime as project_prime_router
+from routers.project import project as project_router
+
+from routers.epic import epic as epic_router
+from routers.epic import epic_prime as epic_prime_router
 # from routers.task import task as task_router
 # from routers.subtask import subtask as subtask_route
 # from routers.sprint import sprint as sprint_route
@@ -51,8 +55,12 @@ async def validation_exception_handler(request, exc):
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(admin_router)
-# app.include_router(project_router)
-# app.include_router(epic_router)
+
+app.include_router(project_prime_router)
+app.include_router(project_router)
+
+app.include_router(epic_prime_router)
+app.include_router(epic_router)
 # app.include_router(task_router)
 # app.include_router(subtask_route)
 # app.include_router(sprint_route)

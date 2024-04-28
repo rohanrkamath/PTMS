@@ -1,108 +1,125 @@
-# from fastapi import FastAPI, APIRouter, HTTPException, Body, Path, Depends, Request
-# from pymongo import MongoClient
-# from bson.objectid import ObjectId
-# from bson.errors import InvalidId
-# from sqlalchemy.orm import Session
-# from database import engine, SessionLocal, get_db
-# from typing import List, Tuple
+from fastapi import FastAPI, APIRouter, HTTPException, Body, Path, Depends, Request, status
+from bson.objectid import ObjectId
+from bson.errors import InvalidId
 
-# from schema.project import ProjectBase, ProjectCreate, ProjectUpdate, ProjectInDB
-# from utils.jwt_validation import get_current_user
-# from utils.memberCheck import validate_project_members 
-# from uuid import uuid4
-# from datetime import datetime
-# from utils.util import JWT_SECRET, ALGORITHM
-# from jose import jwt, JWTError
-# from model.model import User
+from typing import List, Tuple
+
+from schema.project import *
+from utils.jwt_validation import get_current_admin_or_pm, get_current_user
+from utils.memberCheck import validate_project_members 
+from utils.project_util import update_project_field
+
+from uuid import uuid4
+from datetime import datetime
+from utils.create_jwt import JWT_SECRET, ALGORITHM
+from jose import jwt, JWTError
 
 
-# from database import db
+from database import db, archive
 
-# project = APIRouter(
-#     # prefix="/projects",
-#     tags=["projects"],
-#     dependencies=[Depends(get_current_user)]  # Ensure every route in this router requires authentication
-# )
+project_prime = APIRouter(
+    prefix="/project",
+    tags=["projects"],
+    dependencies=[Depends(get_current_admin_or_pm)]  # Ensure every route in this router requires authentication
+)
 
-# projects_collection = db.projects
+project = APIRouter(
+    prefix="/project",
+    tags=["projects"],
+    dependencies=[Depends(get_current_user)]  # Ensure every route in this router requires authentication
+)
 
-# # def validate_project_members(members: List[str], db_session):
-# #     existing_members = db_session.query(User).filter(User.email.in_(members)).all()
-# #     existing_member_emails = {member.email for member in existing_members}
-# #     non_existing_members = [member for member in members if member not in existing_member_emails]
-# #     if non_existing_members:
-# #         raise HTTPException(status_code=400, detail=f"The following users do not exist: {', '.join(non_existing_members)}")
+users_collection = db.users
+projects_collection = db.projects
+project_archive = archive.projects
 
-# # create a project
-# @project.post("/projects/", response_model=ProjectInDB)
-# async def create_project(project: ProjectCreate, created_by: str = Depends(get_current_user), db: Session = Depends(get_db)):
+# create a project
+@project_prime.post("/", response_model=ProjectInDB)
+async def create_project(project: ProjectCreate, current_user: dict = Depends(get_current_admin_or_pm)):
 
-#     validate_project_members(project.members, db)
+    validate_project_members(project.members, users_collection)
 
-#     project_data = project.dict()
-#     project_data["_id"] = uuid4().hex
-#     project_data["project_created"] = datetime.now()
-#     project_data["updated_at"] = None
-#     project_data["created_by"] = created_by  
+    project_data = project.dict()
+    project_data["project_created"] = datetime.now()
+    project_data["updated_at"] = None
+    project_data["updated_by"] = None
+    project_data["created_by"] = current_user["email"]  
     
-#     try:
-#         result = projects_collection.insert_one(project_data)
-#         if result.inserted_id:
-#             project_data["id"] = project_data.pop("_id")
-#             return ProjectInDB(**project_data)
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}")
+    try:
+        result = projects_collection.insert_one(project_data)
+        if result.inserted_id:
+            project_data["id"] = project_data.pop("_id")
+            return ProjectInDB(**project_data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}")
 
-#     raise HTTPException(status_code=500, detail="Project could not be created")
+    raise HTTPException(status_code=500, detail="Project could not be created")
 
-# # get a project
-# @project.get("/projects/{project_id}", response_model=ProjectInDB)
-# async def read_project(project_id: str = Path(..., description="The ID of the project to retrieve")):
-#     project_data = projects_collection.find_one({"_id": project_id})
-#     if project_data:
-#         project_data["id"] = project_data.pop("_id")
-#         return ProjectInDB(**project_data)
-#     raise HTTPException(status_code=404, detail="Project not found")
+# get a project
+@project.get("/{project_id}", response_model=ProjectInDB)
+async def read_project(project_id: str = Path(...)):
+    project_data = projects_collection.find_one({"_id": ObjectId(project_id)})
+    if project_data:
+        project_data["id"] = project_data.pop("_id")
+        return ProjectInDB(**project_data)
+    raise HTTPException(status_code=404, detail="Project not found")
 
-# #update a project
-# @project.put("/projects/{project_id}", response_model=ProjectInDB)
-# async def update_project(project: ProjectUpdate, project_id: str = Path(...), db: Session = Depends(get_db)):
+# Update project name
+@project_prime.patch("/{project_id}/update-name")
+async def update_project_name(project_id: str, name_update: NameUpdate, current_user: dict = Depends(get_current_admin_or_pm)):
+    return await update_project_field(project_id, "name", name_update.new_name, current_user)
 
-#     validate_project_members(project.members, db)
+# Update project description
+@project_prime.patch("/{project_id}/update-description")
+async def update_project_description(project_id: str, description_update: DescriptionUpdate, current_user: dict = Depends(get_current_admin_or_pm)):
+    return await update_project_field(project_id, "description", description_update.new_description, current_user)
 
-#     existing_project = projects_collection.find_one({"_id": project_id})
-#     if not existing_project:
-#         raise HTTPException(status_code=404, detail="Project not found")
+# Update project start date
+@project_prime.patch("/{project_id}/update-start-date")
+async def update_project_start_date(project_id: str, date_update: StartDateUpdate, current_user: dict = Depends(get_current_admin_or_pm)):
+    return await update_project_field(project_id, "start_date", date_update.new_start_date, current_user)
 
-#     update_data = project.dict(exclude_unset=True)
-#     update_data["updated_at"] = datetime.now()
-    
-#     try:
-#         result = projects_collection.update_one({"_id": project_id}, {"$set": update_data})
-#         if result.modified_count == 1:
-#             updated_project = {**existing_project, **update_data}
-#             updated_project["id"] = updated_project.pop("_id")
-#             return ProjectInDB(**updated_project)
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Failed to update project: {str(e)}")
+# Update project end date
+@project_prime.patch("/{project_id}/update-end-date")
+async def update_project_end_date(project_id: str, date_update: EndDateUpdate, current_user: dict = Depends(get_current_admin_or_pm)):
+    return await update_project_field(project_id, "end_date", date_update.new_end_date, current_user)
 
-#     raise HTTPException(status_code=500, detail="Project could not be updated")
+# Update project members
+@project_prime.patch("/{project_id}/update-members")
+async def update_project_members(project_id: str, members_update: MembersUpdate, current_user: dict = Depends(get_current_admin_or_pm)):
+    validate_project_members(members_update.new_members, users_collection)
+    return await update_project_field(project_id, "members", members_update.new_members, current_user)
 
-# # delete a project
-# @project.delete("/projects/{project_id}", response_model=ProjectInDB)
-# async def delete_project(project_id: str = Path(...), db: Session = Depends(get_db)):
+# Update project status
+@project_prime.patch("/{project_id}/update-status")
+async def update_project_status(project_id: str, status_update: StatusUpdate, current_user: dict = Depends(get_current_admin_or_pm)):
+    return await update_project_field(project_id, "active", status_update.new_status, current_user)
 
-#     existing_project = projects_collection.find_one({"_id": project_id})
-#     if not existing_project:
-#         raise HTTPException(status_code=404, detail="Project not found")
+# delete a project
+@project_prime.delete("/{project_id}", status_code=status.HTTP_200_OK)
+async def delete_project(project_id: str = Path(...), current_user: dict = Depends(get_current_admin_or_pm)):
 
-#     try:
-#         result = projects_collection.delete_one({"_id": project_id})
-#         if result.deleted_count == 1:
-#             existing_project["id"] = existing_project.pop("_id")
-#             return ProjectInDB(**existing_project)
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Failed to delete project: {str(e)}")
+    project_id_obj = ObjectId(project_id)
+    existing_project = projects_collection.find_one({"_id": project_id_obj})
+    if not existing_project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-#     raise HTTPException(status_code=500, detail="Project could not be deleted")
+    existing_project['deleted_at'] = datetime.utcnow()
+    existing_project['deleted_by'] = current_user['email']
+
+    # Insert into archive before deletion
+    archive_result = project_archive.insert_one(existing_project)
+    if not archive_result.inserted_id:
+        raise HTTPException(status_code=500, detail="Failed to archive project before deletion")
+
+    # Delete the project from the main collection
+    delete_result = projects_collection.delete_one({"_id": project_id_obj})
+    if delete_result.deleted_count == 0:
+        # Attempt to clean up the archive if the main delete fails
+        project_archive.delete_one({"_id": project_id_obj})
+        raise HTTPException(status_code=500, detail="Failed to delete project from the main collection")
+
+    # Return a success message
+    return {"message": f"Project {project_id} successfully deleted"}
+
 

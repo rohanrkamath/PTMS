@@ -6,6 +6,7 @@ from utils.create_jwt import ALGORITHM, JWT_SECRET
 from database import db
 from bson import ObjectId
 from bson.errors import InvalidId
+from schema.user import Role
 
 from jose import jwt
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -72,6 +73,42 @@ def get_current_admin(request: Request):
         )
 
     if user.get('role') != 'admin':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions"
+        )
+
+    return user
+
+# admin and pm injection for project/epic routes
+def get_current_admin_or_pm(request: Request):
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authenticated")
+
+    try:
+        token = token.split(" ")[1] if ' ' in token else token
+        decoded = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+    except JWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
+
+    user_id = decoded['sub']
+    try:
+        ObjectId(user_id)  # Validate user_id is a valid ObjectId
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
+    
+    user = users_collection.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    if user.get('role') not in [Role.admin.value, Role.project_manager.value]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions"

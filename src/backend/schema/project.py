@@ -1,22 +1,12 @@
-from pydantic import BaseModel, Field, EmailStr, validator
+from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime
 from typing import List, Optional
 from enum import Enum
 from uuid import uuid4
 
-class Status(str, Enum):
-    to_do = "to_do"
-    doing = "doing"
-    done = "done"
-
-class Priority(str, Enum):
-    low = "low"
-    medium = "medium"
-    high = "high"
-    critical = "critical"
-
-# class User(BaseModel):
-#     user_id: str
+class Active(str, Enum):
+    ongoing = "ongoing"
+    completed = "completed"
 
 class ProjectBase(BaseModel):
     name: str
@@ -24,18 +14,34 @@ class ProjectBase(BaseModel):
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     members: Optional[List[str]] = None
+    active: Optional[Active] = Active.ongoing
 
 class ProjectCreate(ProjectBase):
     pass
 
-class ProjectUpdate(ProjectBase):
-    pass
+class NameUpdate(BaseModel):
+    new_name: str
+
+class DescriptionUpdate(BaseModel):
+    new_description: str
+
+class StartDateUpdate(BaseModel):
+    new_start_date: datetime
+
+class EndDateUpdate(BaseModel):
+    new_end_date: datetime
+
+class MembersUpdate(BaseModel):
+    new_members: List[str]
+
+class StatusUpdate(BaseModel):
+    new_status: str
 
 class ProjectInDB(ProjectBase):
-    id: str = Field(default_factory=lambda: str(uuid4()))
     project_created: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = None
-    created_by: str
+    updated_by: Optional[str]
+    created_by: Optional[str]
 
 
 

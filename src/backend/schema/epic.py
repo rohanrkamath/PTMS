@@ -19,7 +19,22 @@ class EpicUpdate(EpicBase):
     pass
 
 class EpicInDB(EpicBase):
-    id: str = Field(default_factory=lambda: str(uuid4()))
     epic_created: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = None
+    updated_by: Optional[str]
     created_by: str
+
+class NameUpdate(BaseModel):
+    new_name: str
+
+class DescriptionUpdate(BaseModel):
+    new_description: str
+
+class StartDateUpdate(BaseModel):
+    new_start_date: datetime
+
+class EndDateUpdate(BaseModel):
+    new_end_date: datetime
+
+class MembersUpdate(BaseModel):
+    new_members: List[EmailStr]
