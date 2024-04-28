@@ -9,16 +9,18 @@ class TimeSheetStatus(str, Enum):
     approved = "Approved"
     denied = "Denied"
 
-class TimesheetEntry(BaseModel):
-    start_time: datetime
-    end_time: Optional[datetime]
-    duration: Optional[timedelta]
-    status: TimeSheetStatus = TimeSheetStatus.reviewing
+class TimeSheetStatusUpdate(BaseModel):
+    status: TimeSheetStatus 
 
-    class Config:
-        orm_mode = True
+# class TimesheetEntry(BaseModel):
+#     start_time: datetime
+#     end_time: Optional[datetime]
+#     status: TimeSheetStatus = None
 
-class TimeSheetinDB(TimesheetEntry):
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    user: str
+#     class Config:
+#         orm_mode = True
+
+# class TimeSheetinDB(TimesheetEntry):
+#     user: str
+#     duration: Optional[timedelta]
 

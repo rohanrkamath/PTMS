@@ -34,8 +34,8 @@ class SubTaskUpdate(SubTaskBase):
     pass
 
 class SubTaskInDB(SubTaskBase):
-    id: str = Field(default_factory=lambda: str(uuid4()))
     subtask_created: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = None
+    updated_by: Optional[str] = None
     created_by: str
 

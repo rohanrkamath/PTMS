@@ -1,104 +1,119 @@
-# from fastapi import APIRouter, HTTPException, Depends, Path, Query
-# from sqlalchemy.orm import Session
-# from datetime import datetime
-# from typing import List
+from fastapi import APIRouter, HTTPException, Depends, Path, Query
+from sqlalchemy.orm import Session
+from datetime import datetime
+from typing import List
+from bson import ObjectId
+from pymongo.errors import PyMongoError
 
-# from database import db, get_db
-# from schema.sprint import SprintCreate, SprintUpdate, SprintInDB
-# from utils.jwt_validation import get_current_user
-# from utils.idCollectionCheck import check_id_exists
-# # from utils.memberCheck import validate_project_members
+from database import db, archive
+from schema.sprint import SprintCreate, SprintUpdate, SprintInDB
+from utils.jwt_validation import get_current_user, get_current_admin_or_pm
+from utils.idCollectionCheck import check_id_exists
+# from utils.memberCheck import validate_project_members
 
-# from uuid import uuid4
+from uuid import uuid4
 
-# sprint = APIRouter(
-#     prefix="/sprint",
-#     tags=["sprints"],
-#     dependencies=[Depends(get_current_user)]
-# )
+sprint = APIRouter(
+    prefix="/sprint",
+    tags=["sprints"],
+    dependencies=[Depends(get_current_admin_or_pm)]
+)
 
-# project_collection = db.projects
-# sprints_collection = db.sprints 
+user_collection = db.users
+project_collection = db.projects
+sprints_collection = db.sprints
+sprint_archive = archive.sprints
 
-# # create a sprint
-# @sprint.post("/", response_model=SprintInDB)
-# async def create_sprint(sprint: SprintCreate, created_by: str = Depends(get_current_user)):
+# create a sprint
+@sprint.post("/", response_model=SprintInDB)
+async def create_sprint(sprint: SprintCreate, current_user: dict = Depends(get_current_admin_or_pm)):
+    project = project_collection.find_one({"_id": ObjectId(sprint.project_id)}, {"members": 1})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-#     check_id_exists(sprint.project_id, project_collection)
+    # Prepare sprint data with project members
+    sprint_data = sprint.dict()
+    sprint_data["members"] = project["members"]  # Include all project members in the sprint
+    sprint_data["sprint_created"] = datetime.now()
+    sprint_data["updated_at"] = None
+    sprint_data["updated_by"] = None
+    sprint_data["created_by"] = current_user["email"]
 
-#     sprint_data = sprint.dict()
-#     sprint_data["_id"] = uuid4().hex
-#     sprint_data["sprint_created"] = datetime.now()
-#     sprint_data["updated_at"] = None
-#     sprint_data["created_by"] = created_by
+    try:
+        result = sprints_collection.insert_one(sprint_data)
+        if result.inserted_id:
+            sprint_data["id"] = sprint_data.pop("_id")
+            return SprintInDB(**sprint_data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create Sprint: {str(e)}")
 
-#     try:
-#         result = sprints_collection.insert_one(sprint_data)
-#         if result.inserted_id:
-#             sprint_data["id"] = sprint_data.pop("_id")
-#             return SprintInDB(**sprint_data)
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Failed to create Sprint: {str(e)}")
+    raise HTTPException(status_code=500, detail="Sprint could not be created")
 
-#     raise HTTPException(status_code=500, detail="Sprint could not be created")
 
-# # read sprint
-# @sprint.get("/{sprint_id}", response_model=SprintInDB)
-# async def read_sprint(sprint_id: str = Path(...)):
-#     sprint_data = sprints_collection.find_one({"_id": sprint_id})
-#     if sprint_data:
-#         sprint_data["id"] = sprint_data.pop("_id")
-#         return SprintInDB(**sprint_data)
-#     raise HTTPException(status_code=404, detail="Sprint not found")
+# read sprint
+@sprint.get("/{sprint_id}", response_model=SprintInDB)
+async def read_sprint(sprint_id: str = Path(...)):
+    sprint_data = sprints_collection.find_one({"_id": ObjectId(sprint_id)})
+    if sprint_data:
+        sprint_data["id"] = sprint_data.pop("_id")
+        return SprintInDB(**sprint_data)
+    raise HTTPException(status_code=404, detail="Sprint not found")
 
-# # get sprints associated to a project
-# # route is throwing an error, needs to be fixed
-# @sprint.get("/project_id/{project_id}", response_model=List[SprintInDB])
-# async def read_sprints_by_project(project_id: str = Path(...)):
-#     sprints_data = list(sprints_collection.find({"project_id": project_id}))
+# update a sprint
+@sprint.put("/{sprint_id}", response_model=SprintInDB)
+async def update_sprint(sprint: SprintUpdate, sprint_id: str = Path(...), current_user: dict = Depends(get_current_admin_or_pm)):
+    existing_sprint = sprints_collection.find_one({"_id": ObjectId(sprint_id)})
+    if not existing_sprint:
+        raise HTTPException(status_code=404, detail="Sprint not found")
 
-#     if not sprints_data:
-#         raise HTTPException(status_code=404, detail="No sprints found for the specified project")
+    update_data = sprint.dict(exclude_unset=True)
+    update_data["updated_at"] = datetime.now()
+    update_data["updated_by"] = current_user["email"]
 
-#     # convert from MongoDB document to Pydantic model
-#     for sprint in sprints_data:
-#         sprint["id"] = sprint.pop("_id")
-#     return [SprintInDB(**sprint) for sprint in sprints_data]
+    non_editable_fields = {'members', 'sprint_created', 'updated_at', 'updated_by', 'created_by'}
+    for field in non_editable_fields:
+        update_data.pop(field, None) 
 
-# # update a sprint
-# @sprint.put("/{sprint_id}", response_model=SprintInDB)
-# async def update_sprint(sprint_id: str = Path(...), sprint: SprintUpdate = Depends()):
-#     existing_sprint = sprints_collection.find_one({"_id": sprint_id})
-#     if not existing_sprint:
-#         raise HTTPException(status_code=404, detail="Sprint not found")
+    result = sprints_collection.update_one({"_id": ObjectId(sprint_id)}, {"$set": update_data})
 
-#     update_data = sprint.dict(exclude_unset=True)
-#     update_data["updated_at"] = datetime.now()
+    if result.modified_count == 1:
+        updated_sprint = sprints_collection.find_one({"_id": ObjectId(sprint_id)})
+        updated_sprint["id"] = str(updated_sprint.pop("_id"))
+        return SprintInDB(**updated_sprint)
+    elif result.modified_count == 0 and result.matched_count == 1:
+        raise HTTPException(status_code=200, detail="No changes made to the sprint")
+    else:
+        raise HTTPException(status_code=500, detail="Failed to update sprint")
 
-#     try:
-#         result = sprints_collection.update_one({"_id": sprint_id}, {"$set": update_data})
-#         if result.modified_count == 1:
-#             updated_sprint = {**existing_sprint, **update_data}
-#             updated_sprint["id"] = updated_sprint.pop("_id")
-#             return SprintInDB(**updated_sprint)
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Failed to update Sprint: {str(e)}")
+    raise HTTPException(status_code=500, detail="Sprint could not be updated")
 
-#     raise HTTPException(status_code=500, detail="Sprint could not be updated")
+# delete a sprint
+@sprint.delete("/{sprint_id}", status_code=200)
+async def delete_sprint(sprint_id: str = Path(...)):
+    sprint_id_obj = ObjectId(sprint_id)  # Ensure sprint_id is a valid ObjectId
+    existing_sprint = sprints_collection.find_one({"_id": sprint_id_obj})
+    if not existing_sprint:
+        raise HTTPException(status_code=404, detail="Sprint not found")
+    
+    # Prepare to archive the sprint
+    existing_sprint['deleted_at'] = datetime.utcnow()
+    existing_sprint['deleted_by'] = "Current user email or identifier"  # Dynamically assigned
 
-# # delete a sprint
-# @sprint.delete("/{sprint_id}", response_model=SprintInDB)
-# async def delete_sprint(sprint_id: str = Path(...)):
-#     existing_sprint = sprints_collection.find_one({"_id": sprint_id})
-#     if not existing_sprint:
-#         raise HTTPException(status_code=404, detail="Sprint not found")
+    try:
+        # Insert the sprint into the archive
+        archive_result = sprint_archive.insert_one(existing_sprint)
+        if not archive_result.inserted_id:
+            raise HTTPException(status_code=500, detail="Failed to archive sprint before deletion")
 
-#     try:
-#         result = sprints_collection.delete_one({"_id": sprint_id})
-#         if result.deleted_count == 1:
-#             existing_sprint["id"] = existing_sprint.pop("_id")
-#             return SprintInDB(**existing_sprint)
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Failed to delete Sprint: {str(e)}")
+        # If archival is successful, delete the sprint from the main collection
+        delete_result = sprints_collection.delete_one({"_id": sprint_id_obj})
+        if delete_result.deleted_count == 0:
+            # If no document was deleted, possibly roll back the archival if needed
+            sprint_archive.delete_one({"_id": sprint_id_obj})
+            raise HTTPException(status_code=500, detail="Failed to delete sprint from the main collection")
+    
+    except PyMongoError as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-#     raise HTTPException(status_code=500, detail="Sprint could not be deleted")
+    # If everything went well, return a success message
+    return {"message": f"Sprint {sprint_id} successfully deleted and archived"}

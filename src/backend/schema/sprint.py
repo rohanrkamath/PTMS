@@ -1,8 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from typing import Optional
 from datetime import datetime
 from enum import Enum
 from uuid import uuid4
+from typing import List
 
 class SprintStatus(str, Enum):
     active = "Active"
@@ -25,9 +26,10 @@ class SprintUpdate(SprintBase):
     pass
 
 class SprintInDB(SprintBase):
-    id: str = Field(default_factory=lambda: str(uuid4()))
+    members: Optional[List[str]] = []
     sprint_created: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = None
+    updated_by: Optional[str]
     created_by: str
 
 # one epic -> many tasks; taskid contains epic id

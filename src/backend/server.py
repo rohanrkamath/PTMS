@@ -13,9 +13,14 @@ from routers.project import project as project_router
 
 from routers.epic import epic as epic_router
 from routers.epic import epic_prime as epic_prime_router
-# from routers.task import task as task_router
-# from routers.subtask import subtask as subtask_route
-# from routers.sprint import sprint as sprint_route
+
+from routers.task import task as task_router
+from routers.subtask import subtask as subtask_route
+
+from routers.sprint import sprint as sprint_route
+
+from routers.timesheet import timesheet_prime as timesheet_prime_router
+from routers.timesheet import timesheet as timesheet_router
 
 app = FastAPI()
 
@@ -61,9 +66,14 @@ app.include_router(project_router)
 
 app.include_router(epic_prime_router)
 app.include_router(epic_router)
-# app.include_router(task_router)
-# app.include_router(subtask_route)
-# app.include_router(sprint_route)
+
+app.include_router(task_router)
+app.include_router(subtask_route)
+
+app.include_router(sprint_route)
+
+app.include_router(timesheet_prime_router)
+app.include_router(timesheet_router)
 
 if __name__ == "__main__":
     import uvicorn

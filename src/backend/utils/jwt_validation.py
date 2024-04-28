@@ -97,7 +97,7 @@ def get_current_admin_or_pm(request: Request):
 
     user_id = decoded['sub']
     try:
-        ObjectId(user_id)  # Validate user_id is a valid ObjectId
+        ObjectId(user_id) 
     except InvalidId:
         raise HTTPException(status_code=400, detail="Invalid user ID format")
     
@@ -109,6 +109,42 @@ def get_current_admin_or_pm(request: Request):
         )
 
     if user.get('role') not in [Role.admin.value, Role.project_manager.value]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions"
+        )
+
+    return user
+
+# admin and hr injection for timesheet
+def get_current_admin_or_hr(request: Request):
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authenticated")
+
+    try:
+        token = token.split(" ")[1] if ' ' in token else token
+        decoded = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+    except JWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
+
+    user_id = decoded['sub']
+    try:
+        ObjectId(user_id)  
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
+    
+    user = users_collection.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    if user.get('role') not in [Role.admin.value, Role.hr.value]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions"

@@ -27,7 +27,7 @@ async def update_epic_field(epic_id: str, field_name: str, new_value, current_us
     updated_epic["id"] = str(updated_epic.pop("_id"))
     return updated_epic
 
-def update_validate_epic_members(epic_id: str, proposed_members: List[str], projects_collection: Collection, epics_collection: Collection):
+async def update_validate_epic_members(epic_id: str, proposed_members: List[str], projects_collection: Collection, epics_collection: Collection):
     # Retrieve the epic to get the associated project ID
     epic = epics_collection.find_one({"_id": ObjectId(epic_id)}, {"project_id": 1})
     if not epic or 'project_id' not in epic:
