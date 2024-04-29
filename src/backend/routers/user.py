@@ -4,8 +4,9 @@ from bson.objectid import ObjectId
 from bson.errors import InvalidId
 from typing import List, Tuple
 
-from schema.user import UserUpdate, UserInDB, Role, FirstNameUpdate, LastNameUpdate, PasswordUpdate, ProfilePicUpdate
-from utils.jwt_validation import get_current_user
+from schema.user import UserUpdate, UserInDB, Role, FirstNameUpdate, LastNameUpdate, PasswordUpdate, ProfilePicUpdate, PasswordUpdateResponse
+# from utils.jwt_validation import get_current_user
+from utils.dependency_injection.dependency import require_role
 from utils.password import hash_password
 from utils.user_crud import update_specific_field
 # from utils.memberCheck import validate_project_members 
@@ -19,7 +20,7 @@ from database import db, archive
 user = APIRouter(
     prefix="/user",
     tags=["user"],
-    dependencies=[Depends(get_current_user)] 
+    dependencies=[Depends(require_role(["project_manager", "admin", "unassigned", "hr", "employee"]))]
 )
 
 users_collection = db.users
@@ -27,7 +28,7 @@ users_archive = archive.users
 
 # get user details
 @user.get('/{user_id}', response_model=UserInDB)
-async def read_user(user_id: str, current_user: dict = Depends(get_current_user)):
+async def read_user(user_id: str, current_user: dict = Depends(require_role(["project_manager", "admin", "unassigned", "hr", "employee"]))):
     try:
         oid = ObjectId(user_id)
     except InvalidId:
@@ -101,24 +102,23 @@ async def read_user(user_id: str, current_user: dict = Depends(get_current_user)
 #     return user_document
 
 @user.patch("/{user_id}/update-first-name", response_model=UserInDB)
-async def update_first_name(user_id: str, update_data: FirstNameUpdate, current_user: dict = Depends(get_current_user)):
+async def update_first_name(user_id: str, update_data: FirstNameUpdate, current_user: dict = Depends(require_role(["project_manager", "admin", "unassigned", "hr", "employee"]))):
     return await update_specific_field(user_id, "first_name", update_data.first_name, current_user)
 
 @user.patch("/{user_id}/update-last-name", response_model=UserInDB)
-async def update_last_name(user_id: str, update_data: LastNameUpdate, current_user: dict = Depends(get_current_user)):
+async def update_last_name(user_id: str, update_data: LastNameUpdate, current_user: dict = Depends(require_role(["project_manager", "admin", "unassigned", "hr", "employee"]))):
     return await update_specific_field(user_id, "last_name", update_data.last_name, current_user)
 
-@user.patch("/{user_id}/update-password", response_model=UserInDB)
-async def update_password(user_id: str, update_data: PasswordUpdate, response: Response ,current_user: dict = Depends(get_current_user)):
+@user.patch("/{user_id}/update-password", response_model=PasswordUpdateResponse)
+async def update_password(user_id: str, update_data: PasswordUpdate, response: Response, current_user: dict = Depends(require_role(["project_manager", "admin", "unassigned", "hr", "employee"]))):
     hashed_password = hash_password(update_data.new_password)
-    updated_user = await update_specific_field(user_id, "password", hashed_password, current_user)
+    await update_specific_field(user_id, "password", hashed_password, current_user)
     
-    # Properly use response to delete the cookie
     response.delete_cookie(key="access_token", path="/", httponly=True, secure=True)
     return {"message": "Password updated successfully. Please re-login to continue."}
 
 @user.patch("/{user_id}/update-profile-pic", response_model=UserInDB)
-async def update_profile_pic(user_id: str, update_data:ProfilePicUpdate, current_user: dict = Depends(get_current_user)):
+async def update_profile_pic(user_id: str, update_data:ProfilePicUpdate, current_user: dict = Depends(require_role(["project_manager", "admin", "unassigned", "hr", "employee"]))):
     return await update_specific_field(user_id, "profile_pic", update_data.profile_pic, current_user)
 
 # @user.delete('/{user_id}', status_code=204)

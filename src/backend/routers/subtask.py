@@ -6,6 +6,7 @@ from datetime import datetime
 from bson import ObjectId
 
 from utils.jwt_validation import get_current_user
+from utils.dependency_injection.dependency import require_role
 from utils.memberCheck import validate_project_members
 from utils.idCollectionCheck import check_id_exists, check_epic_belongs_to_project, check_task_belongs_to_epic
 from utils.subtask_util import *
@@ -16,7 +17,7 @@ from utils.jwt_validation import get_current_user
 subtask = APIRouter(
     prefix="/subtask",
     tags=["subtasks"],
-    dependencies=[Depends(get_current_user)]
+    dependencies=[Depends(require_role(["project_manager", "admin", "employee"]))] 
 )
 
 user_collection = db.users
@@ -30,7 +31,7 @@ import logging
 
 # Create a subtask
 @subtask.post("/", response_model=SubTaskInDB)
-async def create_subtask(subtask: SubTaskCreate, current_user: dict = Depends(get_current_user)):
+async def create_subtask(subtask: SubTaskCreate, current_user: dict = Depends(require_role(["project_manager", "admin", "employee"]))):
 
     try:
         # Standard validations
@@ -80,7 +81,7 @@ async def read_subtask(subtask_id: str = Path(...)):
 
 # update a subtask
 @subtask.put("/{subtask_id}", response_model=SubTaskInDB)
-async def update_subtask(subtask: SubTaskUpdate, subtask_id: str = Path(...), current_user: dict = Depends(get_current_user)):
+async def update_subtask(subtask: SubTaskUpdate, subtask_id: str = Path(...), current_user: dict = Depends(require_role(["project_manager", "admin", "employee"]))):
 
     subtask_id_obj = ObjectId(subtask_id)
 
@@ -124,7 +125,7 @@ async def update_subtask(subtask: SubTaskUpdate, subtask_id: str = Path(...), cu
 
 # delete a subtask
 @subtask.delete("/{subtask_id}", status_code=status.HTTP_200_OK)
-async def delete_subtask(subtask_id: str = Path(...), current_user: dict = Depends(get_current_user)):
+async def delete_subtask(subtask_id: str = Path(...), current_user: dict = Depends(require_role(["project_manager", "admin", "employee"]))):
     subtask_id_obj = ObjectId(subtask_id)  # Convert subtask_id to ObjectId
 
     existing_subtask = subtasks_collection.find_one({"_id": subtask_id_obj})

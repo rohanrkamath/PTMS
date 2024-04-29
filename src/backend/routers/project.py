@@ -8,6 +8,7 @@ from schema.project import *
 from utils.jwt_validation import get_current_admin_or_pm, get_current_user
 from utils.memberCheck import validate_project_members 
 from utils.project_util import update_project_field
+from utils.dependency_injection.dependency import require_role
 
 from uuid import uuid4
 from datetime import datetime
@@ -17,16 +18,22 @@ from jose import jwt, JWTError
 
 from database import db, archive
 
+# project_prime = APIRouter(
+#     prefix="/project",
+#     tags=["projects"],
+#     dependencies=[Depends(get_current_admin_or_pm)]  # Ensure every route in this router requires authentication
+# )
+
 project_prime = APIRouter(
     prefix="/project",
     tags=["projects"],
-    dependencies=[Depends(get_current_admin_or_pm)]  # Ensure every route in this router requires authentication
+    dependencies=[Depends(require_role(["project_manager", "admin"]))] 
 )
 
 project = APIRouter(
     prefix="/project",
     tags=["projects"],
-    dependencies=[Depends(get_current_user)]  # Ensure every route in this router requires authentication
+    dependencies=[Depends(require_role(["project_manager", "admin", "employee"]))]  
 )
 
 users_collection = db.users
@@ -35,8 +42,7 @@ project_archive = archive.projects
 
 # create a project
 @project_prime.post("/", response_model=ProjectInDB)
-async def create_project(project: ProjectCreate, current_user: dict = Depends(get_current_admin_or_pm)):
-
+async def create_project(project: ProjectCreate, current_user: dict = Depends(require_role(["project_manager", "admin"]))):
     validate_project_members(project.members, users_collection)
 
     project_data = project.dict()
@@ -48,7 +54,7 @@ async def create_project(project: ProjectCreate, current_user: dict = Depends(ge
     try:
         result = projects_collection.insert_one(project_data)
         if result.inserted_id:
-            project_data["id"] = project_data.pop("_id")
+            project_data["id"] = str(result.inserted_id)
             return ProjectInDB(**project_data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}")
@@ -66,39 +72,38 @@ async def read_project(project_id: str = Path(...)):
 
 # Update project name
 @project_prime.patch("/{project_id}/update-name")
-async def update_project_name(project_id: str, name_update: NameUpdate, current_user: dict = Depends(get_current_admin_or_pm)):
+async def update_project_name(project_id: str, name_update: NameUpdate, current_user = Depends(require_role(["project_manager", "admin"]))):
     return await update_project_field(project_id, "name", name_update.new_name, current_user)
 
 # Update project description
 @project_prime.patch("/{project_id}/update-description")
-async def update_project_description(project_id: str, description_update: DescriptionUpdate, current_user: dict = Depends(get_current_admin_or_pm)):
+async def update_project_description(project_id: str, description_update: DescriptionUpdate, current_user = Depends(require_role(["project_manager", "admin"]))):
     return await update_project_field(project_id, "description", description_update.new_description, current_user)
 
 # Update project start date
 @project_prime.patch("/{project_id}/update-start-date")
-async def update_project_start_date(project_id: str, date_update: StartDateUpdate, current_user: dict = Depends(get_current_admin_or_pm)):
+async def update_project_start_date(project_id: str, date_update: StartDateUpdate, current_user = Depends(require_role(["project_manager", "admin"]))):
     return await update_project_field(project_id, "start_date", date_update.new_start_date, current_user)
 
 # Update project end date
 @project_prime.patch("/{project_id}/update-end-date")
-async def update_project_end_date(project_id: str, date_update: EndDateUpdate, current_user: dict = Depends(get_current_admin_or_pm)):
+async def update_project_end_date(project_id: str, date_update: EndDateUpdate, current_user = Depends(require_role(["project_manager", "admin"]))):
     return await update_project_field(project_id, "end_date", date_update.new_end_date, current_user)
 
 # Update project members
 @project_prime.patch("/{project_id}/update-members")
-async def update_project_members(project_id: str, members_update: MembersUpdate, current_user: dict = Depends(get_current_admin_or_pm)):
+async def update_project_members(project_id: str, members_update: MembersUpdate, current_user = Depends(require_role(["project_manager", "admin"]))):
     validate_project_members(members_update.new_members, users_collection)
     return await update_project_field(project_id, "members", members_update.new_members, current_user)
 
 # Update project status
 @project_prime.patch("/{project_id}/update-status")
-async def update_project_status(project_id: str, status_update: StatusUpdate, current_user: dict = Depends(get_current_admin_or_pm)):
+async def update_project_status(project_id: str, status_update: StatusUpdate, current_user = Depends(require_role(["project_manager", "admin"]))):
     return await update_project_field(project_id, "active", status_update.new_status, current_user)
 
 # delete a project
 @project_prime.delete("/{project_id}", status_code=status.HTTP_200_OK)
-async def delete_project(project_id: str = Path(...), current_user: dict = Depends(get_current_admin_or_pm)):
-
+async def delete_project(project_id: str = Path(...), current_user = Depends(require_role(["project_manager", "admin"]))):
     project_id_obj = ObjectId(project_id)
     existing_project = projects_collection.find_one({"_id": project_id_obj})
     if not existing_project:

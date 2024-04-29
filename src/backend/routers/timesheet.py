@@ -8,6 +8,7 @@ from bson import ObjectId
 
 from schema.timesheet import TimeSheetStatus, TimeSheetStatusUpdate
 from utils.jwt_validation import get_current_user, get_current_admin_or_hr
+from utils.dependency_injection.dependency import require_role
 from utils.memberCheck import validate_project_members
 from utils.idCollectionCheck import check_id_exists, check_epic_belongs_to_project
 from database import db
@@ -15,20 +16,19 @@ from database import db
 timesheet_prime = APIRouter(
     prefix="/timesheet",
     tags=["timesheets"],
-    dependencies=[Depends(get_current_admin_or_hr)]
+    dependencies=[Depends(require_role(["hr", "admin"]))] 
 )
 
 timesheet = APIRouter(
     prefix="/timesheet",
     tags=["timesheets"],
-    dependencies=[Depends(get_current_user)]
+    dependencies=[Depends(require_role(["project_manager", "admin", "hr", "employee"]))]
 )
 
 timesheets_collection = db.timesheet
 
 @timesheet.post("/start")
-async def start_timesheet(current_user: dict = Depends(get_current_user)):  # Assuming user ID is passed as a parameter
-    # timesheet_data = {
+async def start_timesheet(current_user: dict = Depends(require_role(["project_manager", "admin", "hr", "employee"]))):
     #     "start_time": datetime.now(),
     #     "end_time": None,
     #     "status": None,
@@ -36,11 +36,14 @@ async def start_timesheet(current_user: dict = Depends(get_current_user)):  # As
     #     "duration": None
     # }
 
+    print(current_user)
+
     timesheet_data = {
         "start_time": datetime.now(),
         "status": None,
-        "user": current_user['email']
+        "user": current_user["email"]
     }
+
     try:
         result = timesheets_collection.insert_one(timesheet_data)
         if result.inserted_id:
@@ -51,7 +54,7 @@ async def start_timesheet(current_user: dict = Depends(get_current_user)):  # As
     raise HTTPException(status_code=500, detail="Failed to start timesheet")
 
 @timesheet.post("/stop/{timesheet_id}", response_model=dict)
-async def stop_timesheet(timesheet_id: str, current_user: dict = Depends(get_current_user)):
+async def stop_timesheet(timesheet_id: str, current_user: dict = Depends(require_role(["project_manager", "admin", "hr", "employee"]))):
     # Existing code for checking active timesheets...
 
     timesheet = timesheets_collection.find_one({"_id": ObjectId(timesheet_id)})
@@ -95,7 +98,7 @@ async def stop_timesheet(timesheet_id: str, current_user: dict = Depends(get_cur
 async def change_timesheet_status(
     timesheet_id: str = Path(..., description="The ID of the timesheet to update"),
     status_update: TimeSheetStatusUpdate = Body(..., description="New status to apply"),
-    current_user: dict = Depends(get_current_admin_or_hr)):
+    current_user: dict = Depends(require_role(["hr", "admin"]))):
 
     try:
         result = timesheets_collection.update_one(

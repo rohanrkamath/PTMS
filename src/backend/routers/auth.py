@@ -2,18 +2,12 @@ from fastapi import FastAPI, Depends, HTTPException, Response, Cookie, status, R
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordBearer, HTTPBasic, HTTPBasicCredentials
 
-
-# from sqlalchemy import desc
-# from sqlalchemy.orm import Session
-
 from database import db
-# from model.model import Base, TempUser, User
 from schema.user import UserBase, UserInDB, TOTPValidation
-from utils.auth_crud import check_user_exists, create_temp_user, get_temp_user_by_email, create_user, delete_temp_user
+from utils.crud.auth_crud import check_user_exists, create_temp_user, get_temp_user_by_email, create_user, delete_temp_user
 from utils.create_jwt import create_jwt, JWT_SECRET, ALGORITHM
 from utils.password import hash_password, verify_password
 from utils.jwt_validation import decode_jwt
-# from utils.util import JWT_SECRET, ALGORITHM, pwd_context, create_jwt
 
 from bson import ObjectId
 from bson.errors import InvalidId
@@ -23,7 +17,6 @@ import pyotp
 import qrcode
 from jose import jwt, JWTError
 from passlib.context import CryptContext
-import secrets
 
 from datetime import datetime, timedelta
 from io import BytesIO
@@ -60,6 +53,8 @@ async def register(user_data: UserBase):
 
     temp_user_details = user_data.dict()
     temp_user_details['totp_secret'] = totp_secret
+    temp_user_details['role'] = "unassigned"
+
     create_temp_user(temp_users_collection, temp_user_details)
 
     return StreamingResponse(buf, media_type="image/png")
@@ -86,6 +81,7 @@ async def validate_totp(totp_details: TOTPValidation):
         raise HTTPException(status_code=403, detail="Wrong TOTP entered.")
 
 # login
+
 @auth.post('/login')
 async def login(response: Response, credentials: HTTPBasicCredentials = Depends(security)):
     username = credentials.username
@@ -93,21 +89,44 @@ async def login(response: Response, credentials: HTTPBasicCredentials = Depends(
 
     user = users_collection.find_one({"email": username})
     if user and verify_password(password, user['password']):
-        # Create JWT token with the user's role
-        token = create_jwt(str(user['_id']), JWT_SECRET, user.get('role', 'user'), True)
+        role = user.get('role', 'unassigned')  
+        token = create_jwt(str(user['_id']), JWT_SECRET, role, True)
         response.set_cookie(key="access_token", value=f"Bearer {token}", httponly=True, secure=False)
 
         users_collection.update_one(
             {"_id": user['_id']},
             {"$set": {"last_login": datetime.utcnow()}}
         )
-        
-        return {"message": "Login successful", "user_email": user['email']}
+
+        return {"message": "Login successful", "user_email": user['email'], "role": role}
     else:
         raise HTTPException(
             status_code=401,
             detail="Invalid credentials"
         )
+
+# @auth.post('/login')
+# async def login(response: Response, credentials: HTTPBasicCredentials = Depends(security)):
+#     username = credentials.username
+#     password = credentials.password
+
+#     user = users_collection.find_one({"email": username})
+#     if user and verify_password(password, user['password']):
+#         # Create JWT token with the user's role
+#         token = create_jwt(str(user['_id']), JWT_SECRET, user.get('role', 'user'), True)
+#         response.set_cookie(key="access_token", value=f"Bearer {token}", httponly=True, secure=False)
+
+#         users_collection.update_one(
+#             {"_id": user['_id']},
+#             {"$set": {"last_login": datetime.utcnow()}}
+#         )
+        
+#         return {"message": "Login successful", "user_email": user['email']}
+#     else:
+#         raise HTTPException(
+#             status_code=401,
+#             detail="Invalid credentials"
+#         )
     
 # get current logged in user
 @auth.get('/get_current_user')

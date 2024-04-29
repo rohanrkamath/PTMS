@@ -9,7 +9,32 @@ from datetime import datetime
 
 from schema.epic import EpicInDB
 
+projects_collection = db.projects
 epics_collection = db.epics
+
+def is_user_member_of_project(user_email: str, project_id: str, project_collection: Collection):
+    try:
+        # Ensure the task_id is a valid ObjectId
+        project_obj_id = ObjectId(project_id)
+        project = project_collection.find_one({"_id": project_obj_id}, {"members": 1})
+        print(user_email, project["members"])
+        if not project:
+            # logging.warning(f"No task found with ID: {task_id}")
+            raise HTTPException(status_code=404, detail="Porject not found")
+        
+        # print(user_email, task.get('members', []))
+
+        # Check if the user's email is in the task's members list
+        if user_email in project.get('members', []):
+            # logging.info(f"User {user_email} is a member of task {task_id}")
+            return True
+        
+        # logging.warning(f"User {user_email} is not a member of task {task_id}")
+        return False
+    
+    except Exception as e:
+        # logging.error(f"Error checking membership for user {user_email} in task {task_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error checking membership: {str(e)}")
 
 async def update_epic_field(epic_id: str, field_name: str, new_value, current_user: dict):
     epic_id_obj = ObjectId(epic_id)

@@ -8,6 +8,7 @@ from pymongo.errors import PyMongoError
 from database import db, archive
 from schema.sprint import SprintCreate, SprintUpdate, SprintInDB
 from utils.jwt_validation import get_current_user, get_current_admin_or_pm
+from utils.dependency_injection.dependency import require_role
 from utils.idCollectionCheck import check_id_exists
 # from utils.memberCheck import validate_project_members
 
@@ -16,7 +17,7 @@ from uuid import uuid4
 sprint = APIRouter(
     prefix="/sprint",
     tags=["sprints"],
-    dependencies=[Depends(get_current_admin_or_pm)]
+    dependencies=[Depends(require_role(["project_manager", "admin"]))] 
 )
 
 user_collection = db.users
@@ -26,7 +27,7 @@ sprint_archive = archive.sprints
 
 # create a sprint
 @sprint.post("/", response_model=SprintInDB)
-async def create_sprint(sprint: SprintCreate, current_user: dict = Depends(get_current_admin_or_pm)):
+async def create_sprint(sprint: SprintCreate, current_user: dict = Depends(require_role(["project_manager", "admin"]))):
     project = project_collection.find_one({"_id": ObjectId(sprint.project_id)}, {"members": 1})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -61,7 +62,7 @@ async def read_sprint(sprint_id: str = Path(...)):
 
 # update a sprint
 @sprint.put("/{sprint_id}", response_model=SprintInDB)
-async def update_sprint(sprint: SprintUpdate, sprint_id: str = Path(...), current_user: dict = Depends(get_current_admin_or_pm)):
+async def update_sprint(sprint: SprintUpdate, sprint_id: str = Path(...), current_user: dict = Depends(require_role(["project_manager", "admin"]))):
     existing_sprint = sprints_collection.find_one({"_id": ObjectId(sprint_id)})
     if not existing_sprint:
         raise HTTPException(status_code=404, detail="Sprint not found")

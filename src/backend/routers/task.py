@@ -9,6 +9,7 @@ from bson import ObjectId
 from schema.task import *
 from utils.jwt_validation import get_current_user
 from utils.memberCheck import validate_project_members
+from utils.dependency_injection.dependency import require_role
 from utils.idCollectionCheck import check_id_exists, check_epic_belongs_to_project
 from utils.subtask_util import is_user_member_of_task
 from utils.task_util import *
@@ -17,7 +18,7 @@ from database import db, archive
 task = APIRouter(
     prefix="/task",
     tags=["tasks"],
-    dependencies=[Depends(get_current_user)]
+    dependencies=[Depends(require_role(["project_manager", "admin", "employee"]))] 
 )
 
 users_collections = db.users
@@ -28,7 +29,7 @@ task_archive = archive.tasks
 
 # create a task
 @task.post("/", response_model=TaskInDB)
-async def create_task(task: TaskCreate, current_user: dict = Depends(get_current_user)):
+async def create_task(task: TaskCreate, current_user: dict = Depends(require_role(["project_manager", "admin", "employee"]))):
 
     check_id_exists(task.project_id, projects_collection) 
     check_id_exists(task.epic_id, epics_collection)
@@ -39,7 +40,7 @@ async def create_task(task: TaskCreate, current_user: dict = Depends(get_current
     # check if added user in members field are part of epic
 
     if not is_user_member_of_epic(current_user["email"], task.epic_id, epics_collection):
-        raise HTTPException(status_code=403, detail="Not part of the epic.")
+        raise HTTPException(status_code=403, detail="Current user: Not part of the epic.")
     for members in task.members:
             if not is_user_member_of_epic(members, task.epic_id, epics_collection):
                 raise HTTPException(status_code=403, detail="Not part of the epic.")
@@ -75,7 +76,7 @@ async def read_task(task_id: str = Path(...)):
 
 # update a task
 @task.put("/{task_id}", response_model=TaskInDB)
-async def update_task(task: TaskUpdate, task_id: str = Path(...), current_user: dict = Depends(get_current_user)):
+async def update_task(task: TaskUpdate, task_id: str = Path(...), current_user: dict = Depends(require_role(["project_manager", "admin", "employee"]))):
     task_id_obj = ObjectId(task_id)  # Ensure the task_id is correctly converted to ObjectId
 
     check_id_exists(task.project_id, projects_collection) 
@@ -115,7 +116,7 @@ async def update_task(task: TaskUpdate, task_id: str = Path(...), current_user: 
     return TaskInDB(**updated_task)
 
 @task.delete("/{task_id}", status_code=status.HTTP_200_OK)
-async def delete_task(task_id: str = Path(...), current_user: dict = Depends(get_current_user)):
+async def delete_task(task_id: str = Path(...), current_user: dict = Depends(require_role(["project_manager", "admin", "employee"]))):
     task_id_obj = ObjectId(task_id)  # Convert task_id to ObjectId
 
     existing_task = tasks_collection.find_one({"_id": task_id_obj})
