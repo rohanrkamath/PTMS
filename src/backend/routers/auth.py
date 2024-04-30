@@ -189,4 +189,7 @@ async def logout(request: Request, response: Response):
     response.delete_cookie(key="access_token", path="/", httponly=True, secure=True)
     return {'message': f'Successfully logged out: {user_email}'}
 
+# check cookie
+# task collection
+
 

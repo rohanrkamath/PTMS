@@ -43,11 +43,11 @@ async def create_epic(epic_data: EpicCreate, current_user: dict = Depends(requir
 
     check_id_exists(epic_data.project_id, projects_collection)
 
-    # if not is_user_member_of_project(current_user["email"], epic_data.project_id, projects_collection):
-    #     raise HTTPException(status_code=403, detail="Not part of the task.")
-    # for members in epic.members:
-    #         if not is_user_member_of_project(members, epic_data.project_id, projects_collection):
-    #             raise HTTPException(status_code=403, detail="Not part of the task.")
+    if not is_user_member_of_project(current_user["email"], epic_data.project_id, projects_collection):
+        raise HTTPException(status_code=403, detail="Current User: Not part of the task.")
+    for members in epic_data.members:
+            if not is_user_member_of_project(members, epic_data.project_id, projects_collection):
+                raise HTTPException(status_code=403, detail="Not part of the task.")
 
     validate_epic_members(epic_data.project_id, epic_data.members, projects_collection)
 
@@ -96,19 +96,21 @@ async def update_epic_start_date(epic_id: str, date_update: StartDateUpdate, cur
 async def update_epic_end_date(epic_id: str, date_update: EndDateUpdate, current_user: dict = Depends(require_role(["project_manager", "admin"]))):
     return await update_epic_field(epic_id, "end_date", date_update.new_end_date, current_user)
 
+# Fix this part
+
 # Update epic members
 @epic_prime.patch("/{epic_id}/update-members")
 async def update_epic_members(epic_id: str, members_update: MembersUpdate, current_user: dict = Depends(require_role(["project_manager", "admin"]))):
     update_validate_epic_members(epic_id, members_update.new_members, projects_collection, epics_collection)
 
-    epic_data = epics_collection.find_one({"_id": ObjectId(epic_id)}, {"members": 1})
-    print(epic_data)
+    # epic_data = epics_collection.find_one({"_id": ObjectId(epic_id)}, {"project_id": 1, "members": 1})
+    # print("patch route",epic_data)
 
     # if not is_user_member_of_project(current_user["email"], epic_data["project_id"], projects_collection):
-    #     raise HTTPException(status_code=403, detail="Not part of the project.")
-    # for members in epic.members:
+    #     raise HTTPException(status_code=403, detail="Current User: Not part of the task.")
+    # for members in epic_data.members:
     #         if not is_user_member_of_project(members, epic_data["project_id"], projects_collection):
-    #             raise HTTPException(status_code=403, detail="Not part of the project.") 
+    #             raise HTTPException(status_code=403, detail="Not part of the task.")
     
     return await update_epic_field(epic_id, "members", members_update.new_members, current_user)
 
