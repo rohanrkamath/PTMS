@@ -7,28 +7,28 @@ from pymongo.errors import PyMongoError
 from bson import ObjectId
 
 from schema.timesheet import TimeSheetStatus, TimeSheetStatusUpdate
-from utils.jwt_validation import get_current_user, get_current_admin_or_hr
+# from utils.jwt_validation import get_current_user, get_current_admin_or_hr
 from utils.dependency_injection.dependency import require_role
-from utils.memberCheck import validate_project_members
-from utils.idCollectionCheck import check_id_exists, check_epic_belongs_to_project
+# from utils.memberCheck import validate_project_members
+# from utils.idCollectionCheck import check_id_exists, check_epic_belongs_to_project
 from database import db
 
 timesheet_prime = APIRouter(
     prefix="/timesheet",
     tags=["timesheets"],
-    dependencies=[Depends(require_role(["hr", "admin"]))] 
+    dependencies=[Depends(require_role("timesheet_prime_router"))] 
 )
 
 timesheet = APIRouter(
     prefix="/timesheet",
     tags=["timesheets"],
-    dependencies=[Depends(require_role(["project_manager", "admin", "hr", "employee"]))]
+    dependencies=[Depends(require_role("timesheet_router"))]
 )
 
 timesheets_collection = db.timesheet
 
 @timesheet.post("/start")
-async def start_timesheet(current_user: dict = Depends(require_role(["project_manager", "admin", "hr", "employee"]))):
+async def start_timesheet(current_user: dict = Depends(require_role("timesheet_router"))):
     #     "start_time": datetime.now(),
     #     "end_time": None,
     #     "status": None,
@@ -54,7 +54,7 @@ async def start_timesheet(current_user: dict = Depends(require_role(["project_ma
     raise HTTPException(status_code=500, detail="Failed to start timesheet")
 
 @timesheet.post("/stop/{timesheet_id}", response_model=dict)
-async def stop_timesheet(timesheet_id: str, current_user: dict = Depends(require_role(["project_manager", "admin", "hr", "employee"]))):
+async def stop_timesheet(timesheet_id: str, current_user: dict = Depends(require_role("timesheet_router"))):
     # Existing code for checking active timesheets...
 
     timesheet = timesheets_collection.find_one({"_id": ObjectId(timesheet_id)})
@@ -96,9 +96,7 @@ async def stop_timesheet(timesheet_id: str, current_user: dict = Depends(require
 
 @timesheet_prime.patch("/{timesheet_id}/check", response_model=dict)
 async def change_timesheet_status(
-    timesheet_id: str = Path(..., description="The ID of the timesheet to update"),
-    status_update: TimeSheetStatusUpdate = Body(..., description="New status to apply"),
-    current_user: dict = Depends(require_role(["hr", "admin"]))):
+    timesheet_id: str = Path(...), status_update: TimeSheetStatusUpdate = Body(...), current_user: dict = Depends(require_role("timesheet_prime_router"))):
 
     try:
         result = timesheets_collection.update_one(
@@ -115,6 +113,12 @@ async def change_timesheet_status(
         return {"message": f"Timesheet {timesheet_id} has been checked. Status updated to: {status_update.status.value}"}
     except PyMongoError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    
+'''
+TODO
+1. add check to at some interval to check if start time hasnt been stopped for a prolonged periods of time, lets say 8hrs
+'''
+
 
 # @timesheet.post("/start", response_model=TimeSheetinDB)
 # def start_timesheet(timesheet: TimesheetEntry, current_user = Depends(get_current_user)):

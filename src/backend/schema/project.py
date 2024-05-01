@@ -35,7 +35,8 @@ class EndDateUpdate(BaseModel):
     new_end_date: datetime
 
 class MembersUpdate(BaseModel):
-    new_members: List[str]
+    add_members: List[str]
+    remove_members: List[str]
 
 class StatusUpdate(BaseModel):
     new_status: str

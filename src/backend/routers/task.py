@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Path, Body, Depends, status
+from fastapi import APIRouter, HTTPException, Path, Body, Depends, status, Query
 from sqlalchemy.orm import Session
 from uuid import uuid4
 from datetime import datetime
@@ -7,10 +7,13 @@ from bson import ObjectId
 
 
 from schema.task import *
-from utils.jwt_validation import get_current_user
+# from utils.jwt_validation import get_current_user
 from utils.memberCheck import validate_project_members
 from utils.dependency_injection.dependency import require_role
-from utils.idCollectionCheck import check_id_exists, check_epic_belongs_to_project
+# from utils.idCollectionCheck import check_id_exists, check_epic_belongs_to_project
+from utils.task_management.checkIdExists import check_id_exists
+from utils.task_management.validateMembersForId import validate_members_for_entity
+from utils.task_management.childParentIdCheck import check_entity_belongs_to_parent
 from utils.subtask_util import is_user_member_of_task
 from utils.task_util import *
 from database import db, archive
@@ -18,7 +21,7 @@ from database import db, archive
 task = APIRouter(
     prefix="/task",
     tags=["tasks"],
-    dependencies=[Depends(require_role(["project_manager", "admin", "employee"]))] 
+    dependencies=[Depends(require_role("task_router"))] 
 )
 
 users_collections = db.users
@@ -29,23 +32,37 @@ task_archive = archive.tasks
 
 # create a task
 @task.post("/", response_model=TaskInDB)
-async def create_task(task: TaskCreate, current_user: dict = Depends(require_role(["project_manager", "admin", "employee"]))):
+async def create_task(task: TaskCreate, current_user: dict = Depends(require_role("task_router"))):
 
+    # Check1: to check is epic and project id even exist
     check_id_exists(task.project_id, projects_collection) 
     check_id_exists(task.epic_id, epics_collection)
-    check_epic_belongs_to_project(task.epic_id, task.project_id, epics_collection)
 
-    # check if current user has permission
+    # Check2: check if epic ID is part of the Project using project ID
+    try:
+        check_entity_belongs_to_parent(
+            child_id=task.epic_id, 
+            parent_id=task.project_id, 
+            child_collection=epics_collection, 
+            parent_field="project_id", 
+            child_name="Epic", 
+            parent_name="Project"
+        )
+        print("The epic belongs to the project.")
+    except HTTPException as e:
+        print(f"Validation failed: {e.detail}")
 
-    # check if added user in members field are part of epic
+    # Check3: check if current user and members added have permissions 
+    all_members = task.members + [current_user['email']]
+    validate_members_for_entity(task.epic_id, all_members, current_user['email'], epics_collection, "epic")
 
-    if not is_user_member_of_epic(current_user["email"], task.epic_id, epics_collection):
-        raise HTTPException(status_code=403, detail="Current user: Not part of the epic.")
-    for members in task.members:
-            if not is_user_member_of_epic(members, task.epic_id, epics_collection):
-                raise HTTPException(status_code=403, detail="Not part of the epic.")
+    # if not is_user_member_of_epic(current_user["email"], task.epic_id, epics_collection):
+    #     raise HTTPException(status_code=403, detail="Current user: Not part of the epic.")
+    # for members in task.members:
+    #         if not is_user_member_of_epic(members, task.epic_id, epics_collection):
+    #             raise HTTPException(status_code=403, detail="Not part of the epic.")
 
-    validate_task_members(task.epic_id, task.members, epics_collection, tasks_collection)
+    # validate_task_members(task.epic_id, task.members, epics_collection, tasks_collection)
 
     task_data = task.dict()
     task_data["task_created"] = datetime.now()
@@ -72,24 +89,49 @@ async def read_task(task_id: str = Path(...)):
         return TaskInDB(**task_data)
     raise HTTPException(status_code=404, detail="Task not found")
 
+@task.get("/tasks/", response_model=List[TaskInDB])
+async def get_tasks_by_type(task_type: str = Query(...)):
+    if task_type.lower() not in ["bug", "task", "story"]:
+        raise HTTPException(status_code=400, detail="Invalid task type. Valid types are: Bug, Task, Story.")
 
+    # Query the database for tasks with the specified type
+    tasks = tasks_collection.find({"task_type": task_type.capitalize()})
+    tasks_list = list(tasks)  # Convert cursor to list
+    if not tasks_list:
+        return []  # Return an empty list if no tasks are found
+
+    return tasks_list 
 
 # update a task
 @task.put("/{task_id}", response_model=TaskInDB)
-async def update_task(task: TaskUpdate, task_id: str = Path(...), current_user: dict = Depends(require_role(["project_manager", "admin", "employee"]))):
+async def update_task(task: TaskUpdate, task_id: str = Path(...), current_user: dict = Depends(require_role("task_router"))):
     task_id_obj = ObjectId(task_id)  # Ensure the task_id is correctly converted to ObjectId
 
     check_id_exists(task.project_id, projects_collection) 
     check_id_exists(task.epic_id, epics_collection)
-    check_epic_belongs_to_project(task.epic_id, task.project_id, epics_collection)
+    try:
+        check_entity_belongs_to_parent(
+            child_id=task.epic_id, 
+            parent_id=task.project_id, 
+            child_collection=epics_collection, 
+            parent_field="project_id", 
+            child_name="Epic", 
+            parent_name="Project"
+        )
+        print("The epic belongs to the project.")
+    except HTTPException as e:
+        print(f"Validation failed: {e.detail}")
+    
+    all_members = task.members + [current_user['email']]
+    validate_members_for_entity(task.epic_id, all_members, current_user['email'], epics_collection, "epic")
 
-    if not is_user_member_of_epic(current_user["email"], task.epic_id, epics_collection):
-        raise HTTPException(status_code=403, detail="Not part of the epic.")
-    for members in task.members:
-            if not is_user_member_of_epic(members, task.epic_id, epics_collection):
-                raise HTTPException(status_code=403, detail="Not part of the epic.")
+    # if not is_user_member_of_epic(current_user["email"], task.epic_id, epics_collection):
+    #     raise HTTPException(status_code=403, detail="Not part of the epic.")
+    # for members in task.members:
+    #         if not is_user_member_of_epic(members, task.epic_id, epics_collection):
+    #             raise HTTPException(status_code=403, detail="Not part of the epic.")
             
-    # validate_task_members(task.epic_id, task.members, epics_collection, tasks_collection)
+    # # validate_task_members(task.epic_id, task.members, epics_collection, tasks_collection)
 
     existing_task = tasks_collection.find_one({"_id": task_id_obj})
     if not existing_task:
@@ -116,7 +158,7 @@ async def update_task(task: TaskUpdate, task_id: str = Path(...), current_user: 
     return TaskInDB(**updated_task)
 
 @task.delete("/{task_id}", status_code=status.HTTP_200_OK)
-async def delete_task(task_id: str = Path(...), current_user: dict = Depends(require_role(["project_manager", "admin", "employee"]))):
+async def delete_task(task_id: str = Path(...), current_user: dict = Depends(require_role("task_router"))):
     task_id_obj = ObjectId(task_id)  # Convert task_id to ObjectId
 
     existing_task = tasks_collection.find_one({"_id": task_id_obj})

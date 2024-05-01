@@ -21,7 +21,7 @@ from database import db, archive
 admin = APIRouter(
     prefix="/admin",
     tags=["admin"],
-    dependencies=[Depends(require_role(["admin"]))]
+    dependencies=[Depends(require_role("admin_router"))]
 )
 
 roles_collection = db.roles
@@ -34,7 +34,7 @@ def is_admin(user_id: str):
 
 # admin can add role to user
 @admin.patch("/user/{user_id}/role", response_model=dict)
-async def assign_role_to_user(user_id: str, role_data: UserRoleUpdate, current_user: dict = Depends(require_role(["admin"]))):
+async def assign_role_to_user(user_id: str, role_data: UserRoleUpdate, current_user: dict = Depends(require_role("admin_router"))):
     if not is_admin(current_user['_id']):
         raise HTTPException(status_code=403, detail="Unauthorized")
 
@@ -54,7 +54,7 @@ async def assign_role_to_user(user_id: str, role_data: UserRoleUpdate, current_u
 
 # admin can add roles
 @admin.post("/roles/add", response_model=dict)
-async def add_role(role_data: RoleCreation, current_user: dict = Depends(require_role(["admin"]))):
+async def add_role(role_data: RoleCreation, current_user: dict = Depends(require_role("admin_router"))):
     if not is_admin(current_user['_id']):
         raise HTTPException(status_code=403, detail="Unauthorized")
     
@@ -75,7 +75,7 @@ async def add_role(role_data: RoleCreation, current_user: dict = Depends(require
 
 # admin can delete roles
 @admin.delete("/roles/{role_name}", response_model=dict)
-async def delete_role(role_name: str, current_user: dict = Depends(require_role(["admin"]))):
+async def delete_role(role_name: str, current_user: dict = Depends(require_role("admin_router"))):
     if not is_admin(current_user['_id']):
         raise HTTPException(status_code=403, detail="Unauthorized")
     
@@ -85,8 +85,9 @@ async def delete_role(role_name: str, current_user: dict = Depends(require_role(
     
     return {"message": f"Role {role_name} successfully deleted."}
 
+# add or remove routers from roles
 @admin.patch("/roles/{role_name}/routers", response_model=dict)
-async def update_role_routers(role_name: str, router_update: RouterUpdate, current_user: dict = Depends(require_role(["admin"]))):
+async def update_role_routers(role_name: str, router_update: RouterUpdate, current_user: dict = Depends(require_role("admin_router"))):
     if not is_admin(current_user['_id']):
         raise HTTPException(status_code=403, detail="Unauthorized")
     
@@ -108,11 +109,9 @@ async def update_role_routers(role_name: str, router_update: RouterUpdate, curre
     
     return {"message": f"Accessible routers for role {role_name} updated successfully."}
 
-
-
 # when user is logged out and doesnt remember password, can contact admin. will gen random password, and then can send to user
 @admin.patch('/update-password/{user_id}', response_model=dict)
-async def update_user_password(user_id: str, current_user: dict = Depends(require_role(["admin"]))):
+async def update_user_password(user_id: str, current_user: dict = Depends(require_role("admin_router"))):
     if not is_admin(current_user['_id']):
         raise HTTPException(status_code=403, detail="Unauthorized")
 
@@ -140,7 +139,7 @@ async def update_user_password(user_id: str, current_user: dict = Depends(requir
 
 # user deletion
 @admin.delete('/delete-user/{user_id}', response_model=dict)
-async def delete_user(user_id: str, current_user: dict = Depends(require_role(["admin"]))):
+async def delete_user(user_id: str, current_user: dict = Depends(require_role("admin_router"))):
     try:
         oid = ObjectId(user_id)
     except InvalidId:

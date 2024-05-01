@@ -7,9 +7,9 @@ from pymongo.errors import PyMongoError
 
 from database import db, archive
 from schema.sprint import SprintCreate, SprintUpdate, SprintInDB
-from utils.jwt_validation import get_current_user, get_current_admin_or_pm
+# from utils.jwt_validation import get_current_user, get_current_admin_or_pm
 from utils.dependency_injection.dependency import require_role
-from utils.idCollectionCheck import check_id_exists
+# from utils.idCollectionCheck import check_id_exists
 # from utils.memberCheck import validate_project_members
 
 from uuid import uuid4
@@ -17,7 +17,7 @@ from uuid import uuid4
 sprint = APIRouter(
     prefix="/sprint",
     tags=["sprints"],
-    dependencies=[Depends(require_role(["project_manager", "admin"]))] 
+    dependencies=[Depends(require_role("sprint_router"))] 
 )
 
 user_collection = db.users
@@ -27,7 +27,7 @@ sprint_archive = archive.sprints
 
 # create a sprint
 @sprint.post("/", response_model=SprintInDB)
-async def create_sprint(sprint: SprintCreate, current_user: dict = Depends(require_role(["project_manager", "admin"]))):
+async def create_sprint(sprint: SprintCreate, current_user: dict = Depends(require_role("sprint_router"))):
     project = project_collection.find_one({"_id": ObjectId(sprint.project_id)}, {"members": 1})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -62,7 +62,7 @@ async def read_sprint(sprint_id: str = Path(...)):
 
 # update a sprint
 @sprint.put("/{sprint_id}", response_model=SprintInDB)
-async def update_sprint(sprint: SprintUpdate, sprint_id: str = Path(...), current_user: dict = Depends(require_role(["project_manager", "admin"]))):
+async def update_sprint(sprint: SprintUpdate, sprint_id: str = Path(...), current_user: dict = Depends(require_role("sprint_router"))):
     existing_sprint = sprints_collection.find_one({"_id": ObjectId(sprint_id)})
     if not existing_sprint:
         raise HTTPException(status_code=404, detail="Sprint not found")
@@ -90,7 +90,7 @@ async def update_sprint(sprint: SprintUpdate, sprint_id: str = Path(...), curren
 
 # delete a sprint
 @sprint.delete("/{sprint_id}", status_code=200)
-async def delete_sprint(sprint_id: str = Path(...)):
+async def delete_sprint(sprint_id: str = Path(...), current_user: dict = Depends(require_role("sprint_router"))):
     sprint_id_obj = ObjectId(sprint_id)  # Ensure sprint_id is a valid ObjectId
     existing_sprint = sprints_collection.find_one({"_id": sprint_id_obj})
     if not existing_sprint:
@@ -98,7 +98,7 @@ async def delete_sprint(sprint_id: str = Path(...)):
     
     # Prepare to archive the sprint
     existing_sprint['deleted_at'] = datetime.utcnow()
-    existing_sprint['deleted_by'] = "Current user email or identifier"  # Dynamically assigned
+    existing_sprint['deleted_by'] = current_user['email']
 
     try:
         # Insert the sprint into the archive

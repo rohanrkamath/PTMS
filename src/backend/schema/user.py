@@ -4,11 +4,11 @@ from datetime import datetime
 from uuid import uuid4
 from enum import Enum
 
-class Role(str, Enum):
-    admin = "admin"
-    hr = "hr"
-    project_manager = "project manager"
-    employee = "employee"
+# class Role(str, Enum):
+#     admin = "admin"
+#     hr = "hr"
+#     project_manager = "project manager"
+#     employee = "employee"
 
 class UserBase(BaseModel):
     email: EmailStr

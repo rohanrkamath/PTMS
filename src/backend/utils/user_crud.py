@@ -4,8 +4,8 @@ from bson.objectid import ObjectId
 from bson.errors import InvalidId
 from typing import List, Tuple
 
-from schema.user import UserUpdate, UserInDB, Role
-from utils.jwt_validation import get_current_user
+from schema.user import UserUpdate, UserInDB 
+# from utils.jwt_validation import get_current_user
 from utils.password import hash_password
 # from utils.memberCheck import validate_project_members 
 from uuid import uuid4

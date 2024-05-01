@@ -32,17 +32,3 @@ def validate_project_members(members: List[str], users_collection=db.users):
             details.append(f"The following users have an unassigned role and cannot be added: {', '.join(unassigned_members)}")
         
         raise HTTPException(status_code=400, detail="; ".join(details))
-
-
-def validate_epic_members(project_id: str, proposed_members: List[str], projects_collection: Collection):
-    # Fetch the project to ensure it exists and retrieve its members
-    project = projects_collection.find_one({"_id": ObjectId(project_id)}, {"members": 1})
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    project_members = set(project['members'])
-
-    non_project_members = [member for member in proposed_members if member not in project_members]
-    if non_project_members:
-        raise HTTPException(status_code=400, detail=f"The following users are not members of the project and cannot be added to the epic: {', '.join(non_project_members)}")
-

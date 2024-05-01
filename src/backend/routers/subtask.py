@@ -5,19 +5,20 @@ from uuid import uuid4
 from datetime import datetime
 from bson import ObjectId
 
-from utils.jwt_validation import get_current_user
+# from utils.jwt_validation import get_current_user
 from utils.dependency_injection.dependency import require_role
-from utils.memberCheck import validate_project_members
-from utils.idCollectionCheck import check_id_exists, check_epic_belongs_to_project, check_task_belongs_to_epic
+from utils.task_management.checkIdExists import check_id_exists
+from utils.task_management.validateMembersForId import validate_members_for_entity
+from utils.task_management.childParentIdCheck import check_entity_belongs_to_parent
 from utils.subtask_util import *
 from schema.subtask import SubTaskCreate, SubTaskUpdate, SubTaskInDB
-from utils.jwt_validation import get_current_user
+# from utils.jwt_validation import get_current_user
 
 
 subtask = APIRouter(
     prefix="/subtask",
     tags=["subtasks"],
-    dependencies=[Depends(require_role(["project_manager", "admin", "employee"]))] 
+    dependencies=[Depends(require_role("subtask_router"))] 
 )
 
 user_collection = db.users
@@ -31,23 +32,44 @@ import logging
 
 # Create a subtask
 @subtask.post("/", response_model=SubTaskInDB)
-async def create_subtask(subtask: SubTaskCreate, current_user: dict = Depends(require_role(["project_manager", "admin", "employee"]))):
+async def create_subtask(subtask: SubTaskCreate, current_user: dict = Depends(require_role("subtask_router"))):
 
     try:
-        # Standard validations
+        # Check 1: check if ids exist
         check_id_exists(subtask.project_id, projects_collection)
         check_id_exists(subtask.epic_id, epics_collection)
         check_id_exists(subtask.task_id, tasks_collection)
 
-        check_epic_belongs_to_project(subtask.epic_id, subtask.project_id, epics_collection)
+        # Check 2: check if child id part of parent
+        try:
+            check_entity_belongs_to_parent(
+                child_id=subtask.epic_id, 
+                parent_id=subtask.project_id, 
+                child_collection=epics_collection, 
+                parent_field="project_id", 
+                child_name="Epic", 
+                parent_name="Project"
+            )
+            print("The epic belongs to the project.")
+        except HTTPException as e:
+            print(f"Validation failed: {e.detail}")
 
-        check_task_belongs_to_epic(subtask.task_id, subtask.epic_id, tasks_collection)
+        try:
+            check_entity_belongs_to_parent(
+                child_id=subtask.task_id, 
+                parent_id=subtask.epic_id, 
+                child_collection=tasks_collection, 
+                parent_field="epic_id", 
+                child_name="Task", 
+                parent_name="Epic"
+            )
+            print("The task belongs to the epic.")
+        except HTTPException as e:
+            print(f"Validation failed: {e.detail}")
         
-        if not is_user_member_of_task(current_user["email"], subtask.task_id, tasks_collection):
-            raise HTTPException(status_code=403, detail="Not part of the task.")
-        for members in subtask.members:
-                if not is_user_member_of_task(members, subtask.task_id, tasks_collection):
-                    raise HTTPException(status_code=403, detail="Not part of the task.")
+        # Check3: check if current user and members added have permissions 
+        all_members = subtask.members + [current_user['email']]
+        validate_members_for_entity(subtask.task_id, all_members, current_user['email'], tasks_collection, "task")
 
         # validate_subtask_members(subtask.task_id, subtask.members, tasks_collection, subtasks_collection)
 
@@ -60,13 +82,11 @@ async def create_subtask(subtask: SubTaskCreate, current_user: dict = Depends(re
         result = subtasks_collection.insert_one(subtask_data)
         if result.inserted_id:
             subtask_data["id"] = str(result.inserted_id)
-            logging.info(f"Subtask created with ID: {subtask_data['id']}")
             return SubTaskInDB(**subtask_data)
         else:
             raise HTTPException(status_code=500, detail="Failed to insert subtask in database")
 
     except Exception as e:
-        logging.error(f"Failed to create subtask: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create Subtask: {str(e)}")
 
 
@@ -81,23 +101,45 @@ async def read_subtask(subtask_id: str = Path(...)):
 
 # update a subtask
 @subtask.put("/{subtask_id}", response_model=SubTaskInDB)
-async def update_subtask(subtask: SubTaskUpdate, subtask_id: str = Path(...), current_user: dict = Depends(require_role(["project_manager", "admin", "employee"]))):
+async def update_subtask(subtask: SubTaskUpdate, subtask_id: str = Path(...), current_user: dict = Depends(require_role("subtask_router"))):
 
     subtask_id_obj = ObjectId(subtask_id)
 
+    # Check 1: check if ids exist
     check_id_exists(subtask.project_id, projects_collection)
     check_id_exists(subtask.epic_id, epics_collection)
     check_id_exists(subtask.task_id, tasks_collection)
 
-    check_epic_belongs_to_project(subtask.epic_id, subtask.project_id, epics_collection)
+    # Check 2: check if child id part of parent
+    try:
+        check_entity_belongs_to_parent(
+            child_id=subtask.epic_id, 
+            parent_id=subtask.project_id, 
+            child_collection=epics_collection, 
+            parent_field="project_id", 
+            child_name="Epic", 
+            parent_name="Project"
+        )
+        print("The epic belongs to the project.")
+    except HTTPException as e:
+        print(f"Validation failed: {e.detail}")
 
-    check_task_belongs_to_epic(subtask.task_id, subtask.epic_id, tasks_collection)
-
-    if not is_user_member_of_task(current_user["email"], subtask.task_id, tasks_collection):
-        raise HTTPException(status_code=403, detail="Not part of the task.")
-    for members in subtask.members:
-            if not is_user_member_of_task(members, subtask.task_id, tasks_collection):
-                raise HTTPException(status_code=403, detail="Not part of the task.")
+    try:
+        check_entity_belongs_to_parent(
+            child_id=subtask.task_id, 
+            parent_id=subtask.epic_id, 
+            child_collection=tasks_collection, 
+            parent_field="epic_id", 
+            child_name="Task", 
+            parent_name="Epic"
+        )
+        print("The task belongs to the epic.")
+    except HTTPException as e:
+        print(f"Validation failed: {e.detail}")
+    
+    # Check3: check if current user and members added have permissions 
+    all_members = subtask.members + [current_user['email']]
+    validate_members_for_entity(subtask.task_id, all_members, current_user['email'], tasks_collection, "task")
 
     existing_subtask = subtasks_collection.find_one({"_id": subtask_id_obj})
     if not existing_subtask:
@@ -125,7 +167,7 @@ async def update_subtask(subtask: SubTaskUpdate, subtask_id: str = Path(...), cu
 
 # delete a subtask
 @subtask.delete("/{subtask_id}", status_code=status.HTTP_200_OK)
-async def delete_subtask(subtask_id: str = Path(...), current_user: dict = Depends(require_role(["project_manager", "admin", "employee"]))):
+async def delete_subtask(subtask_id: str = Path(...), current_user: dict = Depends(require_role("subtask_router"))):
     subtask_id_obj = ObjectId(subtask_id)  # Convert subtask_id to ObjectId
 
     existing_subtask = subtasks_collection.find_one({"_id": subtask_id_obj})

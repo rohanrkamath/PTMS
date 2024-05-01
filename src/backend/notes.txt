@@ -163,3 +163,34 @@ Schema structure -
 # epics -> project_id
 # task -> projectid, epic_id
 # subtask -> epic_id task_id
+
+Checks - 
+
+Project - 
+
+validate members (for create and update routes)
+1. Check if user is part of registered database
+2. Check if user does not have a role called unassigned
+
+update members patch path - 
+1. add and remove users, not replace users
+
+Epic - 
+
+for create and update - 
+1. check if member exists in project
+2. check if project_id exists
+
+update members patch path - 
+1. add and remove users, not replace users  
+
+
+
+
+-----------
+TODO:
+1. if parent id is deleted, have to delete all subsequent child ids as well
+2. for time sheet router, need to at a check at intervals to check if a particular timesheet hasnt stopped more than 8hrs or so
+
+Questions - 
+Structure on sprint planning
